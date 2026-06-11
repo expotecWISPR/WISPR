@@ -1,0 +1,420 @@
+================================================================================
+WISPR - DOCUMENTACIÓN DE SESIÓN
+Fecha: 10 de junio de 2026
+================================================================================
+
+RESUMEN DE LA SESIÓN
+--------------------
+Primera sesión de trabajo del proyecto. Hoy no escribimos código todavía,
+lo cual es completamente normal al inicio: antes de construir cualquier cosa,
+hay que saber dónde va cada pieza. Eso es exactamente lo que hicimos hoy,
+crear el esqueleto de carpetas y archivos vacíos que guiarán todo el desarrollo.
+
+Piénsalo como el plano de una casa antes de empezar a construirla.
+No hay paredes aún, pero ya sabemos exactamente dónde va cada cuarto.
+
+Nota: la carpeta frontend/ fue eliminada en esta misma sesión porque el
+frontend lo trabaja otro integrante del equipo. Cuando él comparta su
+estructura, la integramos.
+
+
+================================================================================
+CONTEXTO DEL PROYECTO
+================================================================================
+
+WISPR es una plataforma educativa de tipo CTF (Capture The Flag) desarrollada
+como proyecto para EXPOTEC por estudiantes de undécimo año de Ciberseguridad
+del CTP Don Bosco.
+
+¿Qué es un CTF? Es una competencia donde los participantes resuelven retos de
+ciberseguridad para encontrar una "flag", que es básicamente una cadena de texto
+oculta (ej: WISPR{esto_es_una_flag}). Quien la encuentra, la envía y suma puntos.
+Plataformas como HackTheBox o Hackrocks funcionan así.
+
+Objetivo principal:
+    Ofrecer un entorno unificado donde un estudiante pueda resolver retos de
+    ciberseguridad sin necesidad de configurar máquinas virtuales externas.
+    Todo corre dentro de la aplicación.
+
+Fecha límite: EXPOTEC, octubre 2026.
+
+Prioridad absoluta: que funcione, que sea estable y que podamos defenderlo.
+Nada de construir cosas innecesariamente complicadas.
+
+
+================================================================================
+ESTRUCTURA DE ARCHIVOS CREADA
+================================================================================
+
+A continuación se explica cada carpeta y archivo creado: qué hace, por qué
+existe y por qué se decidió incluirlo desde esta etapa.
+
+Si un concepto se menciona aquí y no lo conocés todavía, no te preocupés,
+lo vamos a ir trabajando con calma en las sesiones correspondientes.
+
+--------------------------------------------------------------------------------
+RAÍZ DEL PROYECTO  (WISPR/)
+--------------------------------------------------------------------------------
+
+Esta es la carpeta principal del proyecto. Todo lo demás vive adentro.
+Los archivos que van directo en la raíz son los que aplican a todo el proyecto
+en general, no a un módulo específico.
+
+    .gitignore
+        Git es la herramienta que usamos para guardar el historial del código
+        (control de versiones). El .gitignore le dice a Git qué archivos NO
+        debe guardar, como contraseñas, claves de la base de datos o miles de
+        archivos de dependencias que se pueden regenerar solos.
+        Se crea desde el primer día para no subir accidentalmente información
+        sensible.
+
+    README.md
+        El "carnet de presentación" del proyecto. Cualquier persona que llegue
+        al repositorio por primera vez debería poder leer este archivo y entender
+        qué es WISPR, cómo instalarlo y cómo correrlo. También es lo primero que
+        ve un juez si evaluara el repositorio.
+
+    docker-compose.yml
+        Docker permite correr aplicaciones en "contenedores", que son como
+        computadoras virtuales muy livianas. docker-compose.yml es el archivo
+        que describe TODOS los servicios del sistema (backend, base de datos,
+        contenedores de retos) y cómo se conectan entre sí. Con un solo comando
+        "docker compose up" se levanta todo el entorno completo.
+        Por ahora está vacío, pero es importante que exista desde el inicio.
+
+    CLAUDE.md
+        Archivo de instrucciones para el asistente de IA (yo). Contiene las
+        reglas del proyecto, las tecnologías elegidas, la filosofía de diseño
+        y cómo debe comportarse el asistente. No afecta al código ni al sistema.
+
+
+--------------------------------------------------------------------------------
+CARPETA: electron/
+--------------------------------------------------------------------------------
+
+Esta carpeta convierte lo que sería una página web en una aplicación de
+escritorio real (con ícono, ventana, instalador, etc.).
+
+¿Por qué Electron? Porque el frontend está hecho en React (tecnología web),
+pero queremos que el resultado final sea una app de escritorio que el usuario
+pueda instalar en su computadora. Electron hace ese puente. Es la misma
+tecnología que usa VS Code, Slack o Discord.
+
+    package.json
+        Define el proyecto Electron: su nombre, versión, qué archivo ejecutar
+        primero y qué dependencias necesita. Todo proyecto Node.js tiene uno.
+
+    main/index.js
+        El "corazón" de Electron. Es el primer archivo que se ejecuta cuando
+        el usuario abre la aplicación. Crea la ventana del escritorio y controla
+        su ciclo de vida (qué pasa cuando se abre, cuando se minimiza, cuando
+        se cierra).
+
+    main/ipcHandlers.js
+        Este es uno de los archivos más importantes de Electron y merece una
+        explicación clara.
+
+        Electron tiene dos "mundos" separados por seguridad:
+          - El proceso MAIN: tiene acceso total al sistema (archivos, red,
+            Docker, etc.). Corre en Node.js.
+          - El proceso RENDERER: es básicamente el navegador donde corre React.
+            No tiene acceso directo al sistema por seguridad.
+
+        IPC (Inter-Process Communication) es el sistema de mensajería entre
+        ambos mundos. Es como un teléfono interno: el renderer dice "oye, ejecutá
+        este comando en Docker" y el main lo procesa y devuelve la respuesta.
+
+        ipcHandlers.js define todos esos "manejadores de llamadas".
+
+    preload/index.js
+        Script que se ejecuta antes de que cargue la interfaz web. Su función
+        es exponer de forma segura y controlada algunas funciones del sistema
+        al frontend, sin darle acceso total a Node.js. Es la capa de seguridad
+        entre ambos mundos.
+
+
+--------------------------------------------------------------------------------
+CARPETA: backend/
+--------------------------------------------------------------------------------
+
+Esta es tu área principal de trabajo. El backend es el servidor que procesa
+toda la lógica del sistema: validar flags, gestionar usuarios, calcular
+puntuaciones, comunicarse con la base de datos.
+
+Está construido con Python y FastAPI. FastAPI es un framework moderno para
+crear APIs (interfaces que permiten que el frontend "hable" con el servidor
+mediante solicitudes HTTP).
+
+La estructura del backend sigue un patrón llamado "arquitectura en capas":
+cada carpeta tiene una responsabilidad específica y no se mezclan entre sí.
+Esto hace el código más fácil de mantener y de entender.
+
+Las capas son, de afuera hacia adentro:
+
+    endpoints  →  reciben la solicitud HTTP del frontend
+    services   →  procesan la lógica de negocio
+    models     →  representan los datos en la base de datos
+    db         →  gestionan la conexión con la base de datos
+
+    main.py
+        El punto de entrada del servidor. Cuando corremos el backend, Python
+        ejecuta este archivo primero. Aquí se inicializa FastAPI y se registran
+        todas las rutas disponibles.
+
+    requirements.txt
+        Lista de todas las librerías Python que necesita el proyecto, con sus
+        versiones exactas. Es como una lista de ingredientes. Cualquiera puede
+        instalar todo con: "pip install -r requirements.txt".
+
+    .env.example
+        Las aplicaciones reales necesitan configuraciones secretas: contraseñas
+        de base de datos, claves de API, etc. Estas NO van en el código ni en
+        Git. Van en un archivo llamado ".env" que cada desarrollador tiene en
+        su máquina. El .env.example es una plantilla que muestra qué variables
+        existen, sin los valores reales.
+
+    app/__init__.py
+        Archivo vacío que le dice a Python "esta carpeta es un módulo importable".
+        Python lo necesita para poder hacer imports entre archivos del proyecto.
+        Aparece en varias carpetas por la misma razón.
+
+    app/api/v1/endpoints/
+        Aquí viven las "rutas" de la API. Una ruta es básicamente una URL que
+        el frontend puede llamar. Por ejemplo:
+            POST /api/v1/flags/submit  → enviar una flag
+            GET  /api/v1/challenges    → obtener lista de retos
+
+        Los archivos dentro organizan esas rutas por tema:
+
+        auth.py       → login, registro, logout, renovar sesión
+        users.py      → ver perfil, historial de retos, estadísticas personales
+        challenges.py → listar retos, filtrar por categoría o dificultad
+        flags.py      → enviar y validar flags (el corazón del CTF)
+        scoreboard.py → ranking global y por categoría
+
+    app/core/
+        Utilidades que usan todas las demás capas. No son específicas de un
+        recurso, aplican a todo el sistema.
+
+        config.py
+            Lee las variables del archivo .env y las deja disponibles para
+            el resto del código. Si una variable obligatoria falta, falla
+            inmediatamente con un mensaje claro en vez de fallar misteriosamente
+            más tarde.
+
+        security.py
+            Funciones relacionadas con seguridad: crear y verificar tokens JWT
+            (los que identifican que un usuario está autenticado) y hacer hash
+            de contraseñas con bcrypt.
+
+            ¿Qué es un hash? Es una transformación de un texto que no puede
+            revertirse. Las contraseñas nunca se guardan en texto plano en la
+            base de datos, siempre como hash.
+
+    app/models/
+        Los modelos definen cómo se ven las tablas de la base de datos usando
+        Python. Con SQLAlchemy escribimos clases Python y el framework las
+        traduce a tablas SQL automáticamente.
+
+        user.py        → tabla de usuarios (id, nombre, email, contraseña, puntos)
+        challenge.py   → tabla de retos (título, descripción, categoría, flag)
+        submission.py  → tabla de intentos (quién envió qué flag y cuándo)
+        category.py    → tabla de categorías (web, crypto, forensics, etc.)
+
+    app/schemas/
+        Si los modelos definen cómo se guardan los datos en la base de datos,
+        los schemas definen cómo entran y salen los datos por la API.
+
+        Por ejemplo, cuando un usuario se registra, el schema valida que venga
+        un email válido, una contraseña con mínimo 8 caracteres, etc. Esto lo
+        hace Pydantic automáticamente.
+
+        user.py       → esquemas para crear usuario, respuesta pública, actualizar perfil
+        challenge.py  → esquemas para crear y listar retos
+        submission.py → esquema para enviar una flag y recibir el resultado
+
+    app/services/
+        Aquí vive la lógica de negocio real. Los endpoints solo reciben la
+        solicitud y la pasan al servicio correspondiente. El servicio es quien
+        realmente "hace el trabajo".
+
+        flag_validator.py
+            Recibe la flag que envió el usuario, la compara contra la que está
+            almacenada en la base de datos (como hash) y decide si es correcta.
+            Si lo es, actualiza la puntuación.
+
+        challenge_generator.py
+            Toma una plantilla de reto y genera una instancia única con
+            parámetros variables: flag aleatoria, nombre de archivo diferente,
+            pistas ajustadas. Así dos usuarios pueden tener el "mismo" reto
+            pero con variantes distintas.
+
+        scoring.py
+            Calcula y actualiza la puntuación de los usuarios. Puede incluir
+            lógica de puntuación dinámica (retos populares valen menos puntos
+            con el tiempo porque son más fáciles de resolver).
+
+        ai_advisor.py
+            Módulo de apoyo de IA. Analiza el historial del usuario y sugiere
+            retos que se ajusten a su nivel actual. Es una funcionalidad de
+            soporte, no es lo más importante del sistema.
+
+    app/db/
+        Todo lo relacionado a la conexión con la base de datos.
+
+        session.py
+            Crea la "sesión" de base de datos: la conexión activa que los
+            endpoints usan para hacer consultas. Define una función get_db()
+            que FastAPI inyecta automáticamente donde se necesite.
+
+        base.py
+            Importa todos los modelos para que Alembic (la herramienta de
+            migraciones) pueda detectarlos y generar las tablas correspondientes.
+
+    migrations/
+        Alembic es la herramienta que maneja los cambios en la base de datos
+        a lo largo del tiempo. Cada vez que modificamos un modelo (agregamos
+        una columna, cambiamos un tipo de dato), Alembic genera un archivo de
+        migración que describe ese cambio. Así la base de datos evoluciona
+        junto al código de forma controlada.
+
+        alembic.ini   → configuración de Alembic
+        env.py        → script que Alembic ejecuta al crear o aplicar migraciones
+        versions/     → historial de todos los cambios aplicados a la base de datos
+
+    tests/
+        Las pruebas automatizadas verifican que el código funciona correctamente
+        sin tener que probarlo a mano cada vez que cambiamos algo.
+
+        unit/
+            Pruebas pequeñas que verifican una función específica de forma
+            aislada. Por ejemplo: ¿el validador de flags devuelve True cuando
+            la flag es correcta y False cuando no?
+
+        integration/
+            Pruebas más completas que verifican flujos enteros tocando la base
+            de datos real. Por ejemplo: registrar un usuario, enviar una flag
+            correcta, verificar que la puntuación aumentó.
+
+
+--------------------------------------------------------------------------------
+CARPETA: docker/
+--------------------------------------------------------------------------------
+
+Docker es el núcleo del laboratorio de WISPR. En vez de pedirle al usuario
+que instale Nmap, Wireshark, Aircrack-ng y otras herramientas en su computadora,
+todo eso corre dentro de contenedores Docker. El usuario no necesita configurar
+nada, simplemente usa la plataforma.
+
+Un contenedor Docker es como una computadora virtual muy liviana y aislada.
+No tiene acceso al sistema del host, tiene exactamente las herramientas que
+necesita y nada más.
+
+    base/Dockerfile
+        La imagen base que comparten todos los contenedores de retos. Contiene
+        dependencias comunes y configuración de seguridad básica (usuario sin
+        privilegios de root, límites de recursos).
+
+    challenges/Dockerfile.web
+        Contenedor para retos web. Puede incluir un servidor con una aplicación
+        vulnerable a XSS, SQLi, LFI, etc.
+
+    challenges/Dockerfile.crypto
+        Contenedor para retos de criptografía. Python con librerías como
+        PyCryptodome para trabajar con cifrados.
+
+    challenges/Dockerfile.forensics
+        Contenedor para forense digital. Incluye herramientas como tshark
+        (Wireshark en línea de comandos), Scapy, Binwalk para analizar archivos.
+
+    challenges/Dockerfile.network
+        Contenedor para retos de redes. Nmap, Aircrack-ng, captura de tráfico.
+
+    compose/docker-compose.dev.yml
+        Configuración para desarrollo local. Tiene puertos abiertos para
+        debugging y volúmenes que permiten ver cambios en tiempo real sin
+        reiniciar contenedores.
+
+    compose/docker-compose.prod.yml
+        Configuración para EXPOTEC. Más restrictiva, sin puertos de debugging,
+        lista para demostración.
+
+
+--------------------------------------------------------------------------------
+CARPETA: challenges/
+--------------------------------------------------------------------------------
+
+Los retos CTF no los genera la IA desde cero. El equipo diseña plantillas y
+el sistema genera variantes únicas a partir de ellas. Esto da control total
+sobre la calidad y coherencia de los retos.
+
+    templates/
+        Una plantilla define la estructura de un tipo de reto: su descripción,
+        qué parámetros pueden variar (el nombre del archivo, el mensaje a cifrar,
+        la IP del objetivo), y cómo se genera la flag para esa instancia.
+
+        web/template.json       → retos de aplicaciones web vulnerables
+        crypto/template.json    → retos de criptografía y cifrado
+        forensics/template.json → retos de análisis forense
+        network/template.json   → retos de redes y protocolos
+        osint/template.json     → retos de inteligencia en fuentes abiertas
+
+    generated/
+        Cuando el sistema genera una instancia de un reto para un usuario,
+        la guarda aquí. Cada instancia tiene su propia flag única y sus
+        propios parámetros.
+
+
+--------------------------------------------------------------------------------
+CARPETA: docs/
+--------------------------------------------------------------------------------
+
+    architecture/
+        Diagramas y documentos técnicos que explican cómo se comunican los
+        módulos del sistema. Útil para entender el sistema completo de un
+        vistazo y para la defensa en EXPOTEC.
+
+    api/
+        Documentación de los endpoints de la API. FastAPI genera esto
+        automáticamente en /docs cuando el servidor está corriendo, pero
+        aquí pueden ir notas adicionales o decisiones de diseño.
+
+
+================================================================================
+PRÓXIMOS PASOS
+================================================================================
+
+Estos son los pasos lógicos para la próxima sesión. No hace falta hacerlos
+todos de una vez, cada uno tiene su momento.
+
+1. Inicializar el repositorio Git
+   Esto activa el control de versiones para que cada cambio quede registrado.
+       git init
+       git add .
+       git commit -m "feat: estructura base del proyecto"
+
+2. Configurar el entorno Python del backend
+   Un "entorno virtual" aísla las dependencias del proyecto para que no
+   interfieran con otras instalaciones de Python en la computadora.
+       python -m venv venv
+       pip install fastapi uvicorn sqlalchemy alembic pydantic[settings]
+
+3. Conectar con Supabase
+   Supabase es el servicio que usaremos para la base de datos PostgreSQL.
+   Tiene un plan gratuito más que suficiente para el proyecto.
+       - Crear cuenta y proyecto en supabase.com
+       - Copiar la DATABASE_URL al archivo .env
+
+4. Crear el primer modelo: Usuario
+   El modelo de usuario es la base de todo: autenticación, puntuación,
+   historial. Empezar por aquí tiene sentido porque todo lo demás lo necesita.
+
+5. Implementar autenticación JWT
+   Antes de construir cualquier funcionalidad, el sistema necesita saber
+   quién está haciendo cada solicitud. JWT (JSON Web Token) es el estándar
+   para esto en APIs modernas.
+
+
+================================================================================
+FIN DE LA SESIÓN - 10 de junio de 2026
+================================================================================
