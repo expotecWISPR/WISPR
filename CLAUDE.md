@@ -63,27 +63,36 @@ La implementación será completamente propia.
 
 # Generación de retos
 
-Los retos NO serán creados completamente por IA.
+Los retos no se generan libremente por IA sin control. El sistema combina dos capas:
 
-El sistema utilizará plantillas diseñadas por el equipo.
+1. **Especificación (IA):** un modelo de lenguaje (Together AI + Llama 3.3 70B, ajustado con
+   LoRA) genera un JSON con los parámetros del reto — narrativa, descripción, pista, flag,
+   dificultad y la técnica específica a usar.
+2. **Materialización (determinista):** ese JSON se valida con un schema de Pydantic
+   (`app/schemas/challenge.py`) y se pasa a un generador del equipo
+   (`app/services/challenge_generator.py`), que construye el archivo o entorno real (ej. con
+   Scapy) según la técnica indicada.
 
-Cada plantilla podrá variar parámetros como:
+La IA **no inventa mecanismos nuevos.** Solo puede elegir la técnica de un **registro fijo**
+de técnicas que el equipo ya programó y probó (ej. `iv_reuse_wep`, `xor_singlebyte`). Si el
+modelo devuelve una técnica fuera del registro, o un JSON con forma inválida, la validación de
+Pydantic lo rechaza antes de intentar generar nada — nunca se materializa un archivo o
+contenedor sin pasar por esa validación.
 
-* nombres,
-* archivos,
-* flags,
-* pistas,
-* valores,
-* escenarios,
-* dificultad.
+Esto mantiene el objetivo original: variantes únicas con coherencia y control, pero ahora los
+valores de esas variantes (incluida la narrativa y la flag) los decide un modelo entrenado en
+vez de estar fijos en el código.
 
-El objetivo es generar variantes únicas manteniendo coherencia y control.
+Para el MVP, el pipeline se implementa completo solo en 1-2 categorías (crypto y network son
+las que ya tienen ejemplos curados); el resto usa retos estáticos hechos a mano.
+
+Detalle completo del pipeline en `docs/pipeline_ia_retos.md`.
 
 ---
 
 # IA
 
-La IA tiene un rol de apoyo.
+La IA tiene un rol de apoyo, no de control total del sistema.
 
 Su función es:
 
@@ -91,9 +100,18 @@ Su función es:
 * recomendar retos,
 * ajustar dificultad,
 * generar o modificar pistas,
-* ayudar en la personalización.
+* ayudar en la personalización,
+* generar la especificación (narrativa, flag, parámetros y técnica) de nuevos retos, dentro de
+  un registro fijo de técnicas ya construidas por el equipo.
 
-La IA no reemplaza el motor de generación procedural.
+La IA no reemplaza el motor de generación procedural: propone parámetros, el motor
+determinista los materializa. Ningún archivo, contenedor o flag se genera sin pasar primero por
+la validación de Pydantic. Detalle completo del flujo en `docs/pipeline_ia_retos.md`.
+
+**Modelo y método:** Llama 3.3 70B Instruct Turbo vía Together AI, ajustado con **LoRA**
+(no fine-tuning completo — se evaluó y se descartó por costo e infraestructura de GPU). El
+dataset de entrenamiento tiene ~500 ejemplos curados por el equipo, repartidos en varias
+categorías.
 
 ---
 
@@ -168,6 +186,29 @@ El usuario no necesita abrir una máquina virtual externa.
 * Scapy
 * Aircrack-ng
 
+## Nube (AWS)
+
+* Amazon S3 — almacenamiento de archivos de retos (capturas .pcap, binarios, imágenes). Reemplaza a MinIO.
+* AWS IAM — permisos y roles de acceso mínimos a los servicios AWS usados.
+* Amazon CloudWatch — logging básico del backend (solo la capa gratuita por ahora).
+* Amazon EC2 — una sola instancia (nginx + FastAPI + Docker host de retos) para el MVP.
+
+AWS Fargate y Application Load Balancer se evaluaron y se descartaron para el MVP por costo y
+complejidad innecesaria a esta escala (ver `docs/arquitectura_mvp.md`).
+
+## Inteligencia artificial (generación de retos y recomendación)
+
+* Together AI — proveedor de inferencia y de fine-tuning administrado.
+* Llama 3.3 70B Instruct Turbo — modelo base, ajustado con **LoRA** vía el servicio de
+  fine-tuning administrado de Together AI (no se gestiona infraestructura GPU propia). Dataset
+  curado por el equipo (~500 ejemplos, varias categorías).
+* El **fine-tuning completo** (reentrenar todos los parámetros del modelo) se evaluó y se
+  descartó: requiere GPUs dedicadas y días de entrenamiento, inviable con los recursos del
+  equipo. LoRA es viable porque solo entrena una fracción pequeña de los parámetros y corre
+  como servicio administrado.
+* Usos: generar la especificación de nuevos retos (narrativa, flag, técnica, dificultad — ver
+  `docs/pipeline_ia_retos.md`), recomendaciones de retos, ajuste de dificultad y pistas.
+
 ---
 
 # Tecnologías en evaluación
@@ -176,11 +217,84 @@ Estas tecnologías no son obligatorias.
 
 Solo deben incorporarse si aparece una necesidad técnica demostrable durante el desarrollo.
 
-* Redis
-* MinIO
-* Celery
-* LLM
 * hcxdumptool
+
+---
+
+# Tecnologías descartadas
+
+Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación técnica nueva.
+
+* Redis — sin necesidad demostrada a la escala del MVP.
+* Celery — sin tareas en segundo plano que lo justifiquen todavía.
+* MinIO — reemplazado por Amazon S3 (el proyecto ya usa AWS para almacenamiento de objetos).
+* LLM genérico — resuelto: se usa específicamente Together AI + Llama 3.3 70B.
+* Fine-tuning completo (reentrenar todos los parámetros) — inviable por GPU/tiempo. Se usa
+  **LoRA** en su lugar (fine-tuning parcial, vía servicio administrado de Together AI).
+
+---
+
+# Estado actual del proyecto (checkpoint de sesión)
+
+Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
+desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
+
+**Última actualización:** 11 de agosto de 2026.
+
+## Decisiones de arquitectura tomadas
+
+* Supabase se usa **solo como base de datos PostgreSQL**. La autenticación JWT se implementa
+  en el backend (`app/core/security.py`), no con el sistema de Auth nativo de Supabase.
+* El sandbox de retos (Docker) es **centralizado en AWS**, compartido por todos los usuarios —
+  no corre localmente en la máquina de cada estudiante. Cada contenedor se limita en memoria y
+  CPU (`--memory`, `--cpus` de Docker) para no afectar a otros usuarios en la misma instancia.
+* Arquitectura AWS del MVP: **una sola instancia EC2** (nginx + FastAPI + Docker host juntos),
+  subred pública, un Security Group como único firewall, sin NAT Gateway ni subredes privadas.
+  Detalle completo en `docs/arquitectura_mvp.md`.
+* También existe `docs/arquitectura_produccion.md`: arquitectura de nivel empresarial (3
+  subredes, NAT Gateway, Defensa en Profundidad) documentada como referencia/objetivo para la
+  defensa ante el profesor — **no es la que se despliega** durante el desarrollo.
+* La instancia EC2 se enciende solo durante sesiones de trabajo y se detiene (Stop, no
+  Terminate) al terminar, para minimizar costo. El presupuesto de $300-400 USD es el **total
+  del proyecto** hasta EXPOTEC, no un monto mensual recurrente.
+* Es **Linux Namespaces**, no "Docker Namespaces" — Docker usa Linux Namespaces internamente,
+  no es una tecnología separada.
+* **Generación de retos con IA (nuevo, 11 ago):** un modelo (Llama 3.3 70B + LoRA, vía
+  Together AI) genera la especificación del reto (JSON: narrativa, flag, técnica, dificultad).
+  Se valida con Pydantic contra un registro fijo de técnicas ya construidas por el equipo; un
+  generador determinista (`challenge_generator.py`, ej. con Scapy) materializa el archivo real.
+  La IA nunca inventa mecanismos nuevos ni genera archivos/binarios directamente. Detalle
+  completo en `docs/pipeline_ia_retos.md`. Alcance del MVP: solo 1-2 categorías (crypto y
+  network) tienen el pipeline completo; el resto usa retos estáticos.
+* **Equipo de backend ahora son 2 personas (26 ago).** El trabajo se dividió por archivos para
+  evitar colisiones de Git — ver `.claude/memory/reparto_tareas.md` **antes de tocar código**
+  si hay más de una persona trabajando en el backend el mismo día.
+
+## Progreso técnico
+
+* Repositorio Git inicializado, con historial de commits.
+* `backend/venv/` creado; dependencias instaladas y fijadas en `backend/requirements.txt`
+  (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, psycopg2-binary,
+  python-jose, passlib[bcrypt], python-multipart, together, boto3, scapy).
+* `backend/.env` configurado con `DATABASE_URL` de Supabase — **conexión verificada**
+  (PostgreSQL 17.6). `TOGETHER_API_KEY` y credenciales de AWS aún pendientes.
+* `backend/.env.example` y `.gitignore` completos; el `.env` real nunca se sube al repositorio.
+* `app/core/config.py` implementado: lee el `.env` con pydantic-settings, falla al arrancar si
+  falta una variable obligatoria (probado). Resto de `backend/app/` sigue siendo esqueleto.
+* Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
+  aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
+  para el fine-tuning con LoRA.
+
+## Pendiente (próximos pasos, en orden)
+
+1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
+2. Crear el modelo `User` (`app/models/user.py`) y su migración con Alembic.
+3. Implementar autenticación JWT (`app/core/security.py`, endpoints en `auth.py`).
+4. Crear bucket S3 + rol IAM, integrar con `boto3`.
+5. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
+6. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
+   `docs/pipeline_ia_retos.md`).
+7. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
 
 ---
 

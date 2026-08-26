@@ -1,0 +1,28 @@
+# Entorno Python
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Variables de entorno (NUNCA subir al repositorio)
+.env
+*.env
+
+# Alembic
+backend/migrations/versions/*.py
+
+# Node / Electron
+node_modules/
+dist/
+electron/dist/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Retos generados (instancias por usuario, no van en Git)
+challenges/generated/
+
+# Scripts temporales de generación de docs
+docs/generar_stack.py
