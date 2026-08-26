@@ -6,6 +6,33 @@ coherencia sobre lo que finalmente se le entrega al estudiante. Complementa las 
 
 ---
 
+## Estado de implementación (26 ago 2026)
+
+Todo lo descrito en este documento ya está implementado y probado, en la rama
+`feature/retos-ia-persona2` (todavía sin PR/merge a `main`):
+
+* ✅ `ChallengeSpec` (`app/schemas/challenge.py`) — schema completo, con el registro fijo de
+  técnicas y validación de formato de flag.
+* ✅ `TECHNIQUE_REGISTRY` (`app/services/challenge_generator.py`) — **ambas** técnicas del
+  ejemplo de este documento están construidas: `iv_reuse_wep` y `xor_singlebyte`. Las dos se
+  probaron simulando el ataque real (recuperar la flag sin conocer la llave de antemano), no
+  solo verificando que el código corre sin error.
+* ✅ Llamada a Together AI (`app/services/ai_advisor.py`) — probada con un cliente simulado.
+  **Pendiente:** probarla contra la API real (falta un `TOGETHER_API_KEY` real en `.env`), y
+  todavía no existe la lógica de "reintentar / usar reto estático de respaldo" que muestra el
+  diagrama más abajo cuando la IA devuelve algo inválido — hoy esa función simplemente
+  propaga el error.
+* ❌ Subida a S3 — los archivos generados quedan en `challenges/generated/` (local, en
+  `.gitignore`), todavía no se suben a S3. Es tarea pendiente separada (ver checkpoint en
+  `CLAUDE.md`).
+* ❌ Fine-tuning con LoRA — se sigue usando el modelo base por inferencia estándar; el dataset
+  de ~500 ejemplos lo sigue curando un compañero del equipo.
+
+Tests: `backend/tests/unit/` (25 tests, `unittest` de la librería estándar). Correr con
+`venv\Scripts\python.exe -m unittest discover -s tests/unit -v` desde `backend/`.
+
+---
+
 ## Idea central
 
 La IA **no genera el reto completo desde cero**. Genera una **especificación** (un JSON con

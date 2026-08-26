@@ -239,7 +239,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 11 de agosto de 2026.
+**Última actualización:** 26 de agosto de 2026 (sesión de Persona 2 — generación de retos con IA).
 
 ## Decisiones de arquitectura tomadas
 
@@ -269,32 +269,73 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * **Equipo de backend ahora son 2 personas (26 ago).** El trabajo se dividió por archivos para
   evitar colisiones de Git — ver `.claude/memory/reparto_tareas.md` **antes de tocar código**
   si hay más de una persona trabajando en el backend el mismo día.
+* **Flujo de Git del equipo (nuevo, 26 ago):** nadie commitea directo sobre `main` — cada
+  persona trabaja en su propia rama (`feature/<algo>`), pushea esa rama a GitHub, y se junta a
+  `main` recién con un Pull Request cuando el trabajo está listo. Esto es clave porque el
+  equipo ya divide el trabajo por archivos: si cada quien commitea directo a `main`, el primero
+  que pushea "empuja" al resto a hacer `pull` antes de poder seguir, y aumenta el riesgo de
+  pisarse aunque los archivos no se toquen. La rama de esta sesión: `feature/retos-ia-persona2`
+  (ya pusheada a GitHub, todavía no mergeada a `main`).
+* **Versión de Python para el venv del backend:** usar **Python 3.12**, no la versión más nueva
+  que tenga instalada cada máquina (ej. 3.14). Motivo: `psycopg2-binary==2.9.10` (la versión
+  fijada en `requirements.txt` hasta el 26 ago) no tiene wheel precompilado para Python 3.14 en
+  Windows, y compilarlo desde código fuente falla porque falta `pg_config`/PostgreSQL local. El
+  26 ago alguien del equipo subió `psycopg2-binary==2.9.12` a `requirements.txt`, que según el
+  mensaje de ese commit agrega soporte para 3.14 — **sin confirmar todavía** con una instalación
+  real en 3.14; hasta confirmarlo, seguir usando 3.12 es la opción segura y probada.
 
 ## Progreso técnico
 
 * Repositorio Git inicializado, con historial de commits.
-* `backend/venv/` creado; dependencias instaladas y fijadas en `backend/requirements.txt`
-  (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, psycopg2-binary,
-  python-jose, passlib[bcrypt], python-multipart, together, boto3, scapy).
+* `backend/venv/` creado (Python 3.12); dependencias instaladas y fijadas en
+  `backend/requirements.txt` (fastapi, uvicorn, sqlalchemy, alembic, pydantic,
+  pydantic-settings, psycopg2-binary, python-jose, passlib[bcrypt], python-multipart, together,
+  boto3, scapy).
 * `backend/.env` configurado con `DATABASE_URL` de Supabase — **conexión verificada**
   (PostgreSQL 17.6). `TOGETHER_API_KEY` y credenciales de AWS aún pendientes.
 * `backend/.env.example` y `.gitignore` completos; el `.env` real nunca se sube al repositorio.
 * `app/core/config.py` implementado: lee el `.env` con pydantic-settings, falla al arrancar si
-  falta una variable obligatoria (probado). Resto de `backend/app/` sigue siendo esqueleto.
-* Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
-  aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
-  para el fine-tuning con LoRA.
+  falta una variable obligatoria (probado).
+* **Pipeline de generación de retos con IA implementado y probado de punta a punta (26 ago,
+  Persona 2)** — las 4 piezas de esa línea del reparto están hechas:
+  - `app/schemas/challenge.py`: `ChallengeSpec` de Pydantic, con `Literal` para
+    category/difficulty/technique (el registro fijo) y validación de formato de flag
+    (`FLAG{...}`).
+  - `app/services/challenge_generator.py`: `TECHNIQUE_REGISTRY` con **ambas** técnicas del MVP
+    implementadas — `generate_wep_reused_iv_pcap` (genera un `.pcap` real con Scapy, RC4 propio,
+    IV reutilizado) y `generate_xor_challenge` (XOR de un solo byte). Las dos se probaron
+    simulando el ataque real (recuperación de flag sin conocer la llave), no solo verificando
+    que no tiran error.
+  - `app/services/ai_advisor.py`: llamada a Together AI (prompting simple, sin fine-tuning
+    todavía) que devuelve el JSON crudo sin validar. Probado con un cliente Together simulado
+    (todavía no probado contra la API real — falta un `TOGETHER_API_KEY` real en `.env`).
+  - `challenges/templates/network/template.json` y `challenges/templates/crypto/template.json`:
+    llenados con ejemplos reales, validados contra `ChallengeSpec` y contra los generadores.
+  - `backend/tests/unit/`: 25 tests con `unittest` de la librería estándar (sin agregar
+    `pytest` a `requirements.txt` a propósito, para no tocar un archivo que el equipo ya trata
+    como compartido/sensible a conflictos). Correr con:
+    `venv\Scripts\python.exe -m unittest discover -s tests/unit -v`
+* Resto de `backend/app/` (línea de Persona 1: `db/`, `models/user.py`, `core/security.py`,
+  `api/v1/endpoints/auth.py`) sigue siendo esqueleto — ver `.claude/memory/reparto_tareas.md`.
 
 ## Pendiente (próximos pasos, en orden)
 
 1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
-2. Crear el modelo `User` (`app/models/user.py`) y su migración con Alembic.
-3. Implementar autenticación JWT (`app/core/security.py`, endpoints en `auth.py`).
-4. Crear bucket S3 + rol IAM, integrar con `boto3`.
+2. Crear el modelo `User` (`app/models/user.py`) y su migración con Alembic. *(Persona 1)*
+3. Implementar autenticación JWT (`app/core/security.py`, endpoints en `auth.py`). *(Persona 1)*
+4. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
+   `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
+   `challenges/generated/` local.
 5. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-6. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
-   `docs/pipeline_ia_retos.md`).
-7. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
+6. ~~Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py`~~ ✅ Hecho (26 ago).
+7. ~~Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`~~ ✅ Hecho
+   (26 ago) — pendiente solo probarlo contra la API real de Together cuando haya
+   `TOGETHER_API_KEY`.
+8. Abrir el Pull Request de `feature/retos-ia-persona2` hacia `main` cuando el equipo esté listo
+   para juntar el trabajo de ambas líneas.
+9. Implementar `generate_xor_challenge` como técnica de respaldo si Together AI no está
+   disponible (ver diagrama "reintentar / usar reto estático" en `docs/pipeline_ia_retos.md`) —
+   todavía no hay lógica de reintento ni de fallback automático, solo las funciones sueltas.
 
 ---
 

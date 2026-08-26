@@ -8,7 +8,9 @@ metadata:
 ---
 
 El usuario es estudiante de undécimo año de Ciberseguridad del CTP Don Bosco.
-Su rol en el proyecto WISPR es **ingeniero de backend**.
+Su rol en el proyecto WISPR es **ingeniero de backend**. Desde que el backend se dividió entre
+dos personas (26 ago 2026), este usuario es específicamente **Persona 2 — generación de retos
+con IA** (ver `.claude/memory/reparto_tareas.md`), no la línea de Usuarios/Autenticación.
 
 Es principiante en desarrollo de software. No tiene experiencia sólida en muchas
 de las tecnologías del stack (FastAPI, SQLAlchemy, Docker, etc.).

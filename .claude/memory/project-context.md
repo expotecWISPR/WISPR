@@ -23,6 +23,14 @@ Decisiones clave a recordar:
   genera el archivo/binario directamente ni inventa mecanismos nuevos. Detalle completo en
   `docs/pipeline_ia_retos.md`. Dataset de ~500 ejemplos curado por un compañero del equipo.
 * Redis, Celery y MinIO fueron evaluados y descartados explícitamente.
+* El venv del backend debe crearse con **Python 3.12**, no la versión más nueva instalada en la
+  máquina (ej. 3.14) — `psycopg2-binary` no tenía wheel para 3.14 en Windows al 26 ago 2026 y
+  falla al compilar desde código fuente sin PostgreSQL local instalado. El equipo subió
+  `psycopg2-binary==2.9.12` para intentar arreglar esto, pero sin confirmar aún con una
+  instalación real en 3.14.
+* Nadie del equipo commitea directo a `main` — cada persona trabaja en su propia rama
+  (`feature/<algo>`) y junta a `main` con Pull Request. Detalle y comandos en
+  `.claude/memory/reparto_tareas.md`.
 
 **Por qué importa:** estas decisiones ya resolvieron ambigüedades que se discutieron a propósito.
 Si una sugerencia futura (propia o de otra IA, ej. ChatGPT/Gemini) reintroduce Fargate, ALB,
