@@ -9,9 +9,6 @@ __pycache__/
 .env
 *.env
 
-# Alembic
-backend/migrations/versions/*.py
-
 # Node / Electron
 node_modules/
 dist/
