@@ -151,19 +151,35 @@ def generate_wep_reused_iv_pcap(spec: ChallengeSpec) -> Path:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# xor_singlebyte — todavía no implementada
+# xor_singlebyte — reto de XOR de un solo byte (categoría crypto)
 # ─────────────────────────────────────────────────────────────────────────
+# La flag se cifra byte a byte contra UNA sola llave (un byte, 0-255)
+# repetida. La vulnerabilidad es el espacio de llaves: con solo 256
+# posibilidades, el estudiante puede probarlas todas (fuerza bruta) y
+# quedarse con la que produce texto legible — no hace falta "romper" nada
+# matemáticamente, es la lección de por qué una llave tan corta no sirve.
 def generate_xor_challenge(spec: ChallengeSpec) -> Path:
     """
-    Placeholder para la técnica de XOR de un solo byte (categoría crypto).
-    Se registra ya en TECHNIQUE_REGISTRY (para que ChallengeSpec la acepte
-    como válida) pero todavía no genera nada — ver alcance del MVP en
-    docs/pipeline_ia_retos.md.
+    Genera un archivo binario con la flag cifrada por XOR contra un solo
+    byte aleatorio. El estudiante prueba las 256 llaves posibles (0-255) y
+    se queda con la que produce un resultado legible (empieza con
+    "FLAG{"), sin necesidad de conocer la llave de antemano:
+
+        para cada llave en 0..255:
+            texto = bytes(b ^ llave for b in ciphertext)
+            si texto parece texto legible -> esa es la llave
+
+    Escribe el archivo en GENERATED_DIR (challenges/generated/), igual que
+    generate_wep_reused_iv_pcap.
     """
-    raise NotImplementedError(
-        "generate_xor_challenge todavía no está implementado. "
-        "La técnica 'xor_singlebyte' no debe usarse hasta que esto se construya."
-    )
+    key = os.urandom(1)[0]  # 0-255 — la llave que el estudiante debe encontrar por fuerza bruta
+    plaintext = spec.flag.encode("utf-8")
+    ciphertext = bytes(b ^ key for b in plaintext)
+
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = GENERATED_DIR / f"{spec.id}.bin"
+    output_path.write_bytes(ciphertext)
+    return output_path
 
 
 # ─────────────────────────────────────────────────────────────────────────
