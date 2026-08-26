@@ -231,6 +231,10 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 * LLM genérico — resuelto: se usa específicamente Together AI + Llama 3.3 70B.
 * Fine-tuning completo (reentrenar todos los parámetros) — inviable por GPU/tiempo. Se usa
   **LoRA** en su lugar (fine-tuning parcial, vía servicio administrado de Together AI).
+* Integración nativa "GitHub Repository" de Supabase (migraciones vía su CLI + branching) — el
+  proyecto gestiona migraciones con **Alembic** apuntando directo a `DATABASE_URL`, no con el
+  CLI de Supabase. Conectarla no aporta nada (busca una carpeta `supabase/migrations/` que no
+  existe) y puede generar bases de datos/costos extra si se activa el branching sin querer.
 
 ---
 
