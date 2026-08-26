@@ -65,7 +65,22 @@ Archivos a trabajar (en este orden):
 
 **Setup necesario antes de empezar:**
 * `git pull` para traer este reparto y el `requirements.txt` actualizado (ya incluye `scapy`).
-* Crear su propio `backend/venv` e instalar con `pip install -r requirements.txt`.
+* Crear su propio `backend/venv` e instalar dependencias. **Los comandos difieren según el
+  sistema operativo** — el `.vscode/settings.json` del repo NO fija un intérprete por defecto
+  a propósito, justamente porque esta ruta no es la misma en los dos sistemas:
+
+  | Paso | Windows (cmd o PowerShell) | Mac / Linux |
+  |---|---|---|
+  | Crear el venv | `python -m venv venv` | `python3 -m venv venv` |
+  | Instalar dependencias | `venv\Scripts\pip install -r requirements.txt` | `venv/bin/pip install -r requirements.txt` |
+  | Ruta del intérprete para VS Code | `backend\venv\Scripts\python.exe` | `backend/venv/bin/python3` |
+
+  En Windows, `python3` normalmente no existe como comando — es `python` a secas. Y la carpeta
+  se llama `Scripts\`, no `bin/`. Si algo de esto falla, probablemente es por usar el comando
+  del sistema operativo equivocado.
+* En VS Code, correr `Python: Select Interpreter` y elegir el que VS Code detecte
+  automáticamente en `backend/venv` (normalmente aparece solo, sin tener que escribir la ruta
+  a mano, una vez que el `venv` ya existe).
 * Copiar `backend/.env.example` a `backend/.env` y pedir el `TOGETHER_API_KEY` por un canal
   seguro (Discord, WhatsApp) — **nunca por Git**. No necesita `DATABASE_URL` real para este
   alcance de tareas; puede dejarlo como el placeholder de `.env.example` mientras no toque la

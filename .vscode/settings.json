@@ -1,3 +1,8 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python3"
+  // No fijamos "python.defaultInterpreterPath" acá a propósito: la ruta del venv
+  // es distinta en Windows (backend\venv\Scripts\python.exe) que en Mac/Linux
+  // (backend/venv/bin/python3), y este archivo se comparte entre todo el equipo.
+  // Cada quien selecciona su intérprete una vez con "Python: Select Interpreter"
+  // (VS Code detecta automáticamente el venv en backend/venv si ya existe).
+  // Ver .claude/memory/reparto_tareas.md para las rutas exactas por sistema operativo.
 }
