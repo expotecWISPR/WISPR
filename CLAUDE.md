@@ -288,7 +288,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * `app/db/session.py`, `app/db/base.py`, `app/models/user.py` implementados. Alembic
   configurado (`migrations/alembic.ini`, `env.py`, `script.py.mako`) y la primera migración
   aplicada: tabla `users` real en Supabase (id, email, username, password_hash, points,
-  is_active, created_at). Resto de `backend/app/` sigue siendo esqueleto.
+  is_active, created_at).
+* `app/core/security.py` implementado y probado (hash de contraseñas + JWT). Se usa `bcrypt`
+  directamente, no `passlib` — `passlib[bcrypt]` está roto con versiones nuevas de `bcrypt`
+  (bug conocido, no reintroducir `passlib` sin verificar que se haya solucionado). Resto de
+  `backend/app/` sigue siendo esqueleto.
 * Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
   aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
   para el fine-tuning con LoRA.
@@ -298,7 +302,8 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
 2. ~~Crear el modelo `User` y su migración con Alembic~~ ✅ Hecho — tabla `users` creada en
    Supabase (migración `1b4b30f0b1aa_create_users_table.py`).
-3. Implementar autenticación JWT (`app/core/security.py`, endpoints en `auth.py`).
+3. ~~Implementar `app/core/security.py` (hash de contraseñas + JWT)~~ ✅ Hecho y probado.
+   Endpoints de `auth.py` siguen pendientes.
 4. Crear bucket S3 + rol IAM, integrar con `boto3`.
 5. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
 6. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
