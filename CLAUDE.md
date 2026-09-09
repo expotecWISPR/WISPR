@@ -291,11 +291,33 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   is_active, created_at).
 * `app/core/security.py` implementado y probado (hash de contraseñas + JWT). Se usa `bcrypt`
   directamente, no `passlib` — `passlib[bcrypt]` está roto con versiones nuevas de `bcrypt`
-  (bug conocido, no reintroducir `passlib` sin verificar que se haya solucionado). Resto de
-  `backend/app/` sigue siendo esqueleto.
+  (bug conocido, no reintroducir `passlib` sin verificar que se haya solucionado).
 * `app/schemas/user.py` implementado y probado: `UserCreate`, `UserPublic` (nunca expone
   `password_hash`), `UserUpdate`, `Token`. Requirió agregar `email-validator` a
   `requirements.txt` (Pydantic necesita ese paquete aparte para el tipo `EmailStr`).
+* `app/api/v1/endpoints/auth.py` implementado: `POST /register`, `POST /login`, y la
+  dependencia `get_current_user` (protege cualquier endpoint que la reciba vía `Depends`).
+* `app/api/v1/endpoints/users.py` implementado: `GET /users/me` (perfil del usuario
+  autenticado), usando `get_current_user` como prueba de que la protección funciona.
+* `app/api/v1/__init__.py` implementado: junta los routers de `auth` y `users` en un
+  `api_router` único para que `main.py` no tenga que conocerlos por separado.
+* `backend/main.py` implementado por primera vez: crea la app FastAPI, agrega CORS (para que
+  Electron pueda llamarlo), monta `api_router` bajo `/api/v1`, y una ruta `/` de salud. **Es la
+  primera vez que el backend completo se puede levantar de verdad** (`uvicorn main:app --reload`).
+* `tests/unit/test_security.py` agregado — las pruebas manuales de `security.py` ahora son
+  automáticas con `pytest` (agregado a `requirements.txt` junto con `httpx`). Las 6 pruebas
+  pasan (`pytest tests/unit/test_security.py -v`).
+* **Pendiente de verificar (sesión cortada por Supabase pausado):** el flujo completo de
+  registro → login → `/users/me` con token real. El servidor arranca y `/users/me` sin token
+  devuelve 401 correctamente, pero `/register` no se pudo probar de punta a punta porque
+  Supabase se pausó de nuevo a mitad de la prueba (ver nota abajo). **Próxima sesión: reactivar
+  Supabase, correr el flujo completo, y borrar cualquier usuario de prueba que quede en la
+  tabla `users` real.**
+* **Nota recurrente — Supabase se pausa solo:** plan gratuito, se pausa tras varios días sin
+  actividad. Ya pasó dos veces. Si algo que antes funcionaba da
+  `could not translate host name ... to address`, no es un bug de código — reactivar en
+  supabase.com → proyecto → "Restore project" (1-2 min) antes de asumir que algo se rompió.
+  Detalle en `.claude/memory/reparto_tareas.md`.
 * Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
   aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
   para el fine-tuning con LoRA.
@@ -306,12 +328,15 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 2. ~~Crear el modelo `User` y su migración con Alembic~~ ✅ Hecho — tabla `users` creada en
    Supabase (migración `1b4b30f0b1aa_create_users_table.py`).
 3. ~~Implementar `app/core/security.py` (hash de contraseñas + JWT)~~ ✅ Hecho y probado.
-   Endpoints de `auth.py` siguen pendientes.
-4. Crear bucket S3 + rol IAM, integrar con `boto3`.
-5. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-6. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
+4. ~~Implementar `auth.py`, `users.py`, router de v1 y `main.py`~~ ✅ Código escrito, pruebas
+   unitarias pasan. **Falta verificar el flujo completo con la base de datos real** (bloqueado
+   por Supabase pausado — reactivar y probar `POST /register` → `POST /login` → `GET
+   /users/me` con un token real; borrar el usuario de prueba después).
+5. Crear bucket S3 + rol IAM, integrar con `boto3`.
+6. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
+7. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
    `docs/pipeline_ia_retos.md`).
-7. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
+8. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
 
 ---
 

@@ -7,6 +7,13 @@ metadata:
 
 **Última actualización:** 9 de septiembre de 2026.
 
+**Nota recurrente — Supabase se pausa solo:** el proyecto está en el plan gratuito de Supabase,
+que pausa la base de datos después de varios días sin actividad. Ya pasó dos veces en esta
+sesión de trabajo. Si algo que antes funcionaba de repente da
+`could not translate host name ... to address` al conectar, no es un bug de código — entrá a
+supabase.com, abrí el proyecto, y hacé clic en "Restore project" (tarda 1-2 minutos). Revisar
+esto **antes** de asumir que algo se rompió.
+
 Este archivo se actualiza cada vez que el equipo de backend se reparte trabajo entre varias
 personas. Antes de tocar código, cualquier integrante (o su Claude) debe revisar esta sección
 para saber en qué archivos puede trabajar sin generar conflictos de Git con el resto del equipo.
@@ -37,7 +44,14 @@ Archivos a trabajar (en este orden):
    `passlib` — ver nota en `CLAUDE.md`).
 7. ~~`backend/app/schemas/user.py`~~ ✅ Hecho y probado — `UserCreate`, `UserPublic`,
    `UserUpdate`, `Token`. Requirió agregar `email-validator` a `requirements.txt`.
-8. `backend/app/api/v1/endpoints/auth.py` — endpoints de registro/login. **Pendiente.**
+8. ~~`backend/app/api/v1/endpoints/auth.py`~~ ✅ Código escrito (`register`, `login`,
+   `get_current_user`), junto con `users.py` (`GET /users/me`), el router de
+   `app/api/v1/__init__.py`, y `backend/main.py` (por primera vez el backend arranca de
+   verdad). Pruebas unitarias de `security.py` automatizadas en `tests/unit/test_security.py`
+   (6/6 pasan). **Pendiente:** probar el flujo completo registro→login→perfil contra la base de
+   datos real — se cortó por Supabase pausado a mitad de la prueba. Próxima sesión: reactivar
+   Supabase, correr `POST /register` → `POST /login` → `GET /users/me`, y borrar el usuario de
+   prueba de la tabla `users` real al terminar.
 
 **No tocar:** `app/schemas/challenge.py`, `app/services/challenge_generator.py`,
 `app/services/ai_advisor.py`, `challenges/templates/` — son de la Persona 2.
@@ -86,6 +100,15 @@ Archivos a trabajar (en este orden):
 
 **No tocar:** `app/db/`, `app/models/user.py`, `app/core/security.py`,
 `app/api/v1/endpoints/auth.py`, `migrations/` — son de la Persona 1.
+
+## Estado de la fusión (merge) pendiente
+
+La Persona 2 terminó su tanda de archivos y subió su trabajo a la rama
+`feature/retos-ia-persona2` (no a `main`). **Todavía no se revisó ni se fusionó** — quedó
+pendiente porque la Persona 1 siguió trabajando en su propia línea mientras tanto. Próxima
+sesión: `git fetch origin`, revisar el código de esa rama con el mismo criterio crítico que el
+resto del proyecto, y si está bien, fusionarla a `main`. Después de fusionar, repartir la
+siguiente tanda de tareas entre los dos.
 
 ## Archivo compartido (ya resuelto de antemano)
 
