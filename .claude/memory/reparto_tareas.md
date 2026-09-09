@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**Última actualización:** 26 de agosto de 2026.
+**Última actualización:** 9 de septiembre de 2026.
 
 Este archivo se actualiza cada vez que el equipo de backend se reparte trabajo entre varias
 personas. Antes de tocar código, cualquier integrante (o su Claude) debe revisar esta sección
@@ -28,18 +28,16 @@ Ver diseño completo en `CLAUDE.md` (sección "IA" y checkpoint) y en la sesión
 
 Archivos a trabajar (en este orden):
 
-1. `backend/app/db/base.py` — declarar la `Base` de SQLAlchemy e importar los modelos para que
-   Alembic los detecte automáticamente.
-2. `backend/app/db/session.py` — crear el `engine` y la función `get_db()` que FastAPI inyecta
-   en los endpoints.
-3. `backend/app/models/user.py` — el modelo `User` (id, email, password_hash, points,
-   created_at, etc.).
-4. `backend/migrations/alembic.ini` y `backend/migrations/env.py` — conectar Alembic a
-   `settings.DATABASE_URL` (desde `app/core/config.py`) y a `Base.metadata`.
-5. Generar y aplicar la primera migración (crea la tabla `users` real en Supabase).
-6. `backend/app/core/security.py` — hash de contraseñas con bcrypt, crear y verificar JWT.
-7. `backend/app/schemas/user.py` — esquemas de entrada/salida (registro, login, perfil público).
-8. Si alcanza el tiempo: `backend/app/api/v1/endpoints/auth.py` — endpoints de registro/login.
+1. ~~`backend/app/db/base.py`~~ ✅ Hecho.
+2. ~~`backend/app/db/session.py`~~ ✅ Hecho.
+3. ~~`backend/app/models/user.py`~~ ✅ Hecho.
+4. ~~`backend/migrations/alembic.ini` y `env.py`~~ ✅ Hecho.
+5. ~~Primera migración (tabla `users` en Supabase)~~ ✅ Hecho y verificado.
+6. ~~`backend/app/core/security.py`~~ ✅ Hecho y probado (hash con `bcrypt` directo, no
+   `passlib` — ver nota en `CLAUDE.md`).
+7. ~~`backend/app/schemas/user.py`~~ ✅ Hecho y probado — `UserCreate`, `UserPublic`,
+   `UserUpdate`, `Token`. Requirió agregar `email-validator` a `requirements.txt`.
+8. `backend/app/api/v1/endpoints/auth.py` — endpoints de registro/login. **Pendiente.**
 
 **No tocar:** `app/schemas/challenge.py`, `app/services/challenge_generator.py`,
 `app/services/ai_advisor.py`, `challenges/templates/` — son de la Persona 2.

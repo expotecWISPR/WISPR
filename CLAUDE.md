@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 11 de agosto de 2026.
+**Última actualización:** 9 de septiembre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -278,8 +278,8 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
 * Repositorio Git inicializado, con historial de commits.
 * `backend/venv/` creado; dependencias instaladas y fijadas en `backend/requirements.txt`
-  (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, psycopg2-binary,
-  python-jose, passlib[bcrypt], python-multipart, together, boto3, scapy).
+  (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, email-validator,
+  psycopg2-binary, python-jose, bcrypt, python-multipart, together, boto3, scapy).
 * `backend/.env` configurado con `DATABASE_URL` de Supabase — **conexión verificada**
   (PostgreSQL 17.6). `TOGETHER_API_KEY` y credenciales de AWS aún pendientes.
 * `backend/.env.example` y `.gitignore` completos; el `.env` real nunca se sube al repositorio.
@@ -293,6 +293,9 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   directamente, no `passlib` — `passlib[bcrypt]` está roto con versiones nuevas de `bcrypt`
   (bug conocido, no reintroducir `passlib` sin verificar que se haya solucionado). Resto de
   `backend/app/` sigue siendo esqueleto.
+* `app/schemas/user.py` implementado y probado: `UserCreate`, `UserPublic` (nunca expone
+  `password_hash`), `UserUpdate`, `Token`. Requirió agregar `email-validator` a
+  `requirements.txt` (Pydantic necesita ese paquete aparte para el tipo `EmailStr`).
 * Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
   aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
   para el fine-tuning con LoRA.
