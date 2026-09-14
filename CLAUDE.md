@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 9 de septiembre de 2026.
+**Última actualización:** 13 de septiembre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -273,6 +273,35 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * **Equipo de backend ahora son 2 personas (26 ago).** El trabajo se dividió por archivos para
   evitar colisiones de Git — ver `.claude/memory/reparto_tareas.md` **antes de tocar código**
   si hay más de una persona trabajando en el backend el mismo día.
+* **Autenticación con verificación de correo (MFA) + perfil de usuario ampliado (nuevo, 13 sep).**
+  Decisión de equipo: el registro **y** el login exigen un código de verificación de 6 dígitos
+  enviado al correo (doble capa: contraseña + posesión del correo). Se decidió MFA en ambos
+  pasos a propósito, aceptando la fricción extra en cada login a cambio de más seguridad.
+  El modelo `User` se amplía con `full_name`, `gender` y `role` (`estudiante` | `profesor` |
+  `admin`); el `username` existente se reutiliza como "handle" (no se agrega un campo aparte).
+  El **rol se deriva del dominio institucional** (`@est.cedesdonbosco.ed.cr` → estudiante,
+  `@cedesdonbosco.ed.cr` → profesor); cualquier otro correo válido se acepta y entra como
+  **estudiante** por defecto. El login sigue siendo por **correo** + contraseña (estándar
+  OAuth2), no por handle.
+  - **Envío de correo:** SMTP con `smtplib` (biblioteca estándar de Python, sin dependencia
+    nueva), con **fallback a "modo desarrollo"** (el código se registra en consola/archivo en
+    vez de fallar) para que un SMTP caído nunca bloquee el registro. Requiere variables `SMTP_*`
+    nuevas en `config.py` y `.env.example`.
+  - **Almacén de códigos:** en memoria (un diccionario en el proceso), suficiente para el MVP de
+    **una sola instancia EC2**. Nota de escala: si algún día se corren varios workers, mover a
+    una tabla en la BD (Redis está descartado). Se deja señalado para no sobre-ingeniar ahora.
+  - **Aviso de entrega institucional:** el Workspace del colegio **rechaza correo externo**
+    (rebote `550 5.7.1`, política institucional). Con un Gmail remitente los códigos llegan a
+    dominios externos (gmail, etc.), pero para correos `@*.cedesdonbosco.ed.cr` hará falta que el
+    Departamento de Sistemas ponga el remitente en lista blanca, o que den un SMTP interno.
+  - **Origen:** estas funciones se prototiparon por error en un frontend aparte en Node
+    (`wispr_terminal_professional`) en vez de en este backend. Ese prototipo ya validó el flujo
+    completo (registro→verificación→login→verificación con correo real). Ahora se **migran a
+    FastAPI**, que es donde corresponden. La migración es trabajo de la **Persona 1** y no toca
+    archivos de la Persona 2.
+  - **Terminal Kali/Docker:** por ahora permanece como servicio Node aparte del prototipo; su
+    ubicación definitiva se decidirá más adelante (criterio: que sea funcional y no exponga
+    datos). No forma parte de esta migración de auth.
 
 ## Progreso técnico
 
@@ -332,11 +361,21 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    unitarias pasan. **Falta verificar el flujo completo con la base de datos real** (bloqueado
    por Supabase pausado — reactivar y probar `POST /register` → `POST /login` → `GET
    /users/me` con un token real; borrar el usuario de prueba después).
-5. Crear bucket S3 + rol IAM, integrar con `boto3`.
-6. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-7. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
+5. **Migración de auth con MFA por correo + perfil ampliado (Persona 1, decidido 13 sep).**
+   En orden:
+   a) Ampliar el modelo `User` (`full_name`, `gender`, `role`) y crear la nueva migración
+      Alembic; aplicarla a Supabase reactivado y borrar los usuarios de prueba al terminar.
+   b) `app/services/email.py` — envío por `smtplib` con fallback a modo desarrollo; agregar las
+      variables `SMTP_*` a `config.py` y `.env.example`.
+   c) Endpoints MFA en `auth.py`: `register`→`verify` y `login`→`login-verify`, más `resend`;
+      `verify` y `login-verify` devuelven el JWT. Rol por dominio institucional (cualquier otro
+      correo → estudiante). Ajustar `schemas/user.py`.
+   d) Almacén de códigos en memoria (dict). Tests unitarios (sin BD) + prueba del envío real.
+6. Crear bucket S3 + rol IAM, integrar con `boto3`.
+7. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
+8. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
    `docs/pipeline_ia_retos.md`).
-8. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
+9. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
 
 ---
 

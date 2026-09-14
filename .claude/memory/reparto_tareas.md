@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**Última actualización:** 9 de septiembre de 2026.
+**Última actualización:** 13 de septiembre de 2026.
 
 **Nota recurrente — Supabase se pausa solo:** el proyecto está en el plan gratuito de Supabase,
 que pausa la base de datos después de varios días sin actividad. Ya pasó dos veces en esta
@@ -52,6 +52,16 @@ Archivos a trabajar (en este orden):
    datos real — se cortó por Supabase pausado a mitad de la prueba. Próxima sesión: reactivar
    Supabase, correr `POST /register` → `POST /login` → `GET /users/me`, y borrar el usuario de
    prueba de la tabla `users` real al terminar.
+
+9. **(Próxima tanda, decidido 13 sep) Migración de auth con MFA por correo + perfil ampliado.**
+   Se prototipó por error en un frontend Node aparte (`wispr_terminal_professional`, fuera de
+   este repo) en vez de en el backend; ese prototipo ya validó el flujo completo con correo
+   real. Ahora se migra a FastAPI. Archivos (todos de Persona 1, **ninguno de Persona 2**):
+   `app/models/user.py` (+`full_name`, `gender`, `role`), nueva migración en `migrations/`,
+   `app/schemas/user.py`, `app/api/v1/endpoints/auth.py` (endpoints `register`/`verify`/
+   `login`/`login-verify`/`resend`), `app/core/config.py` (+`SMTP_*`), `.env.example`, y un
+   nuevo `app/services/email.py`. Requiere Supabase reactivado y el `DATABASE_URL` (Persona 1).
+   Ver detalle y decisiones en `CLAUDE.md` (checkpoint 13 sep).
 
 **No tocar:** `app/schemas/challenge.py`, `app/services/challenge_generator.py`,
 `app/services/ai_advisor.py`, `challenges/templates/` — son de la Persona 2.
