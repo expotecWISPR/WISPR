@@ -247,8 +247,9 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
 ## Decisiones de arquitectura tomadas
 
-* Supabase se usa **solo como base de datos PostgreSQL**. La autenticación JWT se implementa
-  en el backend (`app/core/security.py`), no con el sistema de Auth nativo de Supabase.
+* Supabase se usa **solo como base de datos PostgreSQL**. La autenticación se implementa en
+  el backend, no con el sistema de Auth nativo de Supabase. **Cambio del 7 oct:** ya no es JWT
+  stateless — ver el bullet de migración de auth más abajo.
 * El sandbox de retos (Docker) es **centralizado en AWS**, compartido por todos los usuarios —
   no corre localmente en la máquina de cada estudiante. Cada contenedor se limita en memoria y
   CPU (`--memory`, `--cpus` de Docker) para no afectar a otros usuarios en la misma instancia.
@@ -287,6 +288,39 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   re-confirmarla con el equipo ahora que ya está visible para ambos en `main`.
 * Versión de Python para el venv del backend: usar **Python 3.12**, no la más nueva instalada
   en la máquina (ej. 3.14) — ver nota de `psycopg2-binary` en "Progreso técnico" más abajo.
+* **Auth con MFA migrado de `wispr_terminal_professional` a FastAPI (7 oct).** Ese proyecto
+  (carpeta aparte, `/home/lonsoo/wispr_terminal_professional`, no es un repo Git) tenía un
+  backend Node real y ya probado con correo real: registro/login con código de 6 dígitos,
+  sesiones, bloqueo por fuerza bruta. Su contrato de API está documentado en
+  `docs/BACKEND-PENDIENTE.md` de ese proyecto. Decisiones tomadas al migrar:
+  - **Rutas idénticas a las del prototipo** (`/api/players/register`, `/verify`, `/resend`,
+    `/login`, `/login-verify`, `/login-resend`, `/me`, `/logout`), montadas en FastAPI sin el
+    prefijo `/v1`, para que el frontend ya terminado no tenga que cambiar sus llamadas — solo
+    apuntar su URL base (`<meta name="wispr-api">` en `index.html`) a este backend.
+  - **Sesiones revocables respaldadas en Supabase, no JWT.** El prototipo usaba un token opaco
+    cuyo hash SHA-256 vive en servidor (revocable de verdad al hacer logout/bloquear una
+    cuenta) — se decidió mantener ese esquema en vez del JWT stateless que ya estaba hecho en
+    `security.py`, porque un JWT no se puede revocar sin una lista negra aparte. Implementado en
+    `app/core/sessions.py` + tabla `sessions` nueva (antes era `lab/data/sessions.json`).
+  - Lógica de negocio migrada 1:1 desde `server.js` a `app/services/auth_flow.py`: validaciones,
+    mensajes de error en español (el frontend los muestra directo), rol por dominio
+    institucional, bloqueo tras 5 fallos en 15 min, mensaje de error genérico para no filtrar
+    qué cuentas existen. Contraseñas con **bcrypt** (ya probado) en vez del `scrypt` del
+    prototipo — mismo nivel de seguridad, sin reimplementar nada.
+  - Los endpoints viejos (`/api/v1/auth`, `/api/v1/users`, JWT sin MFA) se **eliminaron**, no se
+    dejaron en paralelo — convivir con la ruta vieja sin MFA sería un agujero de seguridad.
+  - **Fuera de alcance a propósito:** retos/progreso/ranking/grupos/terminal Kali (todo lo demás
+    que ya tiene `server.js`) — esto fue solo la migración de auth. `publicPlayer()` devuelve
+    `solved`/`attempts`/`submissions`/`lessonProgress` vacíos por ahora para no romper al
+    frontend, que ya espera esas llaves.
+  - 59 tests (35 nuevos de esta migración) pasan contra una base SQLite en memoria — no se pudo
+    probar contra Supabase real porque estaba pausado. **Pendiente real: aplicar la migración
+    de Alembic y probar el flujo completo con Supabase reactivado antes de dar esto por cerrado.**
+  - ⚠️ **Hallazgo de seguridad, sin resolver todavía:** `wispr_terminal_professional/.env.example`
+    tiene una contraseña de aplicación de Gmail real en texto plano (no es un repo Git, así que
+    no se subió a ningún lado, pero ese archivo es justo el que se comparte por convención).
+    Recomendado: rotarla en myaccount.google.com/apppasswords y dejar el `.env.example` con un
+    placeholder.
 * **Autenticación con verificación de correo (MFA) + perfil de usuario ampliado (nuevo, 13 sep).**
   Decisión de equipo: el registro **y** el login exigen un código de verificación de 6 dígitos
   enviado al correo (doble capa: contraseña + posesión del correo). Se decidió MFA en ambos
@@ -339,24 +373,23 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * `app/schemas/user.py` implementado y probado: `UserCreate`, `UserPublic` (nunca expone
   `password_hash`), `UserUpdate`, `Token`. Requirió agregar `email-validator` a
   `requirements.txt` (Pydantic necesita ese paquete aparte para el tipo `EmailStr`).
-* `app/api/v1/endpoints/auth.py` implementado: `POST /register`, `POST /login`, y la
-  dependencia `get_current_user` (protege cualquier endpoint que la reciba vía `Depends`).
-* `app/api/v1/endpoints/users.py` implementado: `GET /users/me` (perfil del usuario
-  autenticado), usando `get_current_user` como prueba de que la protección funciona.
-* `app/api/v1/__init__.py` implementado: junta los routers de `auth` y `users` en un
-  `api_router` único para que `main.py` no tenga que conocerlos por separado.
 * `backend/main.py` implementado por primera vez: crea la app FastAPI, agrega CORS (para que
-  Electron pueda llamarlo), monta `api_router` bajo `/api/v1`, y una ruta `/` de salud. **Es la
-  primera vez que el backend completo se puede levantar de verdad** (`uvicorn main:app --reload`).
+  Electron pueda llamarlo), y una ruta `/` de salud.
 * `tests/unit/test_security.py` agregado — las pruebas manuales de `security.py` ahora son
-  automáticas con `pytest` (agregado a `requirements.txt` junto con `httpx`). Las 6 pruebas
-  pasan (`pytest tests/unit/test_security.py -v`).
-* **Pendiente de verificar (sesión cortada por Supabase pausado):** el flujo completo de
-  registro → login → `/users/me` con token real. El servidor arranca y `/users/me` sin token
-  devuelve 401 correctamente, pero `/register` no se pudo probar de punta a punta porque
-  Supabase se pausó de nuevo a mitad de la prueba (ver nota abajo). **Próxima sesión: reactivar
-  Supabase, correr el flujo completo, y borrar cualquier usuario de prueba que quede en la
-  tabla `users` real.**
+  automáticas con `pytest` (agregado a `requirements.txt` junto con `httpx`).
+* **(Reemplazado el 7 oct)** `app/api/v1/endpoints/auth.py`/`users.py` (login simple sin MFA,
+  JWT stateless) se **eliminaron** — ver el bullet de migración de auth en "Decisiones de
+  arquitectura" más arriba, y el siguiente bullet.
+* **Auth con MFA + sesiones revocables, migrado de `wispr_terminal_professional` (7 oct):**
+  `app/api/players.py` (rutas `/api/players/*`), `app/services/auth_flow.py` (registro, login,
+  bloqueo por fuerza bruta — lógica migrada 1:1 del prototipo Node), `app/core/sessions.py` +
+  modelo `app/models/session.py` (sesiones revocables respaldadas en una tabla nueva, no JWT),
+  `app/services/email.py` (envío por `smtplib` con fallback a modo desarrollo), migración
+  Alembic `27e315b1d2f6` (**todavía no aplicada** — Supabase sigue pausado). 59 tests pasan
+  (`pytest` desde `backend/`): 20 en `tests/unit/test_auth_flow.py` (SQLite en memoria) + 4 de
+  integración HTTP en `tests/integration/test_players_api.py` + los 35 ya existentes.
+  **Pendiente real: reactivar Supabase, aplicar la migración, y probar el flujo completo
+  (registro→verificación→login→MFA→`/me`) con correo real antes de dar esto por cerrado.**
 * **Nota recurrente — Supabase se pausa solo:** plan gratuito, se pausa tras varios días sin
   actividad. Ya pasó dos veces. Si algo que antes funcionaba da
   `could not translate host name ... to address`, no es un bug de código — reactivar en
@@ -391,23 +424,19 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 2. ~~Crear el modelo `User` y su migración con Alembic~~ ✅ Hecho — tabla `users` creada en
    Supabase (migración `1b4b30f0b1aa_create_users_table.py`).
 3. ~~Implementar `app/core/security.py` (hash de contraseñas + JWT)~~ ✅ Hecho y probado.
-4. ~~Implementar `auth.py`, `users.py`, router de v1 y `main.py`~~ ✅ Código escrito, pruebas
-   unitarias pasan. **Falta verificar el flujo completo con la base de datos real** (bloqueado
-   por Supabase pausado — reactivar y probar `POST /register` → `POST /login` → `GET
-   /users/me` con un token real; borrar el usuario de prueba después).
+4. ~~Implementar `auth.py`, `users.py`, router de v1 y `main.py`~~ ✅ Hecho — **reemplazado el
+   7 oct** por la migración de auth con MFA (siguiente punto); ya no existen esos archivos.
 5. ~~Fusionar `feature/retos-ia-persona2` a `main`~~ ✅ Hecho (7 oct) — ver "Progreso técnico".
-6. **(En curso, 7 oct) Migración de auth con MFA por correo + perfil ampliado (Persona 1).**
-   El equipo confirmó hoy que esto se hace ahora: el flujo vive prototipado en un frontend
-   aparte (fuera de este repo) y hay que migrarlo a FastAPI + Supabase, no seguir sirviéndolo
-   desde el frontend. En orden:
-   a) Ampliar el modelo `User` (`full_name`, `gender`, `role`) y crear la nueva migración
-      Alembic; aplicarla a Supabase reactivado y borrar los usuarios de prueba al terminar.
-   b) `app/services/email.py` — envío por `smtplib` con fallback a modo desarrollo; agregar las
-      variables `SMTP_*` a `config.py` y `.env.example`.
-   c) Endpoints MFA en `auth.py`: `register`→`verify` y `login`→`login-verify`, más `resend`;
-      `verify` y `login-verify` devuelven el JWT. Rol por dominio institucional (cualquier otro
-      correo → estudiante). Ajustar `schemas/user.py`.
-   d) Almacén de códigos en memoria (dict). Tests unitarios (sin BD) + prueba del envío real.
+6. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Código escrito y probado
+   (7 oct, 59 tests, SQLite en memoria — ver "Progreso técnico"). **Falta antes de cerrarlo
+   de verdad:**
+   a) Reactivar Supabase y aplicar la migración `27e315b1d2f6`; borrar usuarios de prueba.
+   b) Probar el flujo completo con correo real (`SMTP_*` en `.env`) contra Supabase.
+   c) Rotar la contraseña de aplicación de Gmail expuesta en
+      `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba).
+   d) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
+      este backend y confirmar que el flujo real (no solo las pruebas) funciona de punta a
+      punta — esta es la pieza de "entrelazar frontend y backend" que falta todavía.
 7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.

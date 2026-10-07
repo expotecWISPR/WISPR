@@ -50,6 +50,36 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     S3_BUCKET_NAME: str
 
+    # ── Correo (verificación MFA) ───────────────────────────────────────
+    # Mismos nombres de variable que usaba wispr_terminal_professional, para
+    # poder reusar el .env ya probado con correo real. Todas son opcionales:
+    # sin SMTP_HOST, el código se registra en consola/archivo en vez de
+    # enviarse de verdad ("modo desarrollo" — ver app/services/email.py).
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_SECURE: bool = False
+    SMTP_USER: str | None = None
+    SMTP_PASS: str | None = None
+    MAIL_FROM: str | None = None
+
+    # ── Sesiones (ver app/core/sessions.py) ──────────────────────────────
+    SESSION_IDLE_HOURS: int = 12
+    SESSION_MAX_DAYS: int = 7
+
+    # ── Códigos de verificación de un solo uso (MFA) ─────────────────────
+    OTP_TTL_MINUTES: int = 10
+    OTP_RESEND_COOLDOWN_SECONDS: int = 30
+    OTP_MAX_ATTEMPTS: int = 5
+
+    # ── Bloqueo de cuenta por fuerza bruta ────────────────────────────────
+    LOGIN_LOCK_THRESHOLD: int = 5
+    LOGIN_LOCK_WINDOW_MINUTES: int = 15
+    LOGIN_LOCK_DURATION_MINUTES: int = 15
+
+    # ── Rol por dominio institucional ────────────────────────────────────
+    STUDENT_EMAIL_SUFFIX: str = "@est.cedesdonbosco.ed.cr"
+    TEACHER_EMAIL_SUFFIX: str = "@cedesdonbosco.ed.cr"
+
     # ── Entorno ──────────────────────────────────────────────────────
     ENVIRONMENT: Literal["development", "production"] = "development"
 

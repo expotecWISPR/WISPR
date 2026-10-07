@@ -70,15 +70,13 @@ Archivos a trabajar (en este orden):
    Supabase, correr `POST /register` → `POST /login` → `GET /users/me`, y borrar el usuario de
    prueba de la tabla `users` real al terminar.
 
-9. **(Próxima tanda, decidido 13 sep) Migración de auth con MFA por correo + perfil ampliado.**
-   Se prototipó por error en un frontend Node aparte (`wispr_terminal_professional`, fuera de
-   este repo) en vez de en el backend; ese prototipo ya validó el flujo completo con correo
-   real. Ahora se migra a FastAPI. Archivos (todos de Persona 1, **ninguno de Persona 2**):
-   `app/models/user.py` (+`full_name`, `gender`, `role`), nueva migración en `migrations/`,
-   `app/schemas/user.py`, `app/api/v1/endpoints/auth.py` (endpoints `register`/`verify`/
-   `login`/`login-verify`/`resend`), `app/core/config.py` (+`SMTP_*`), `.env.example`, y un
-   nuevo `app/services/email.py`. Requiere Supabase reactivado y el `DATABASE_URL` (Persona 1).
-   Ver detalle y decisiones en `CLAUDE.md` (checkpoint 13 sep).
+9. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Código escrito y probado
+   (7 oct): `app/models/user.py` ampliado, migración `27e315b1d2f6`, `app/services/email.py`,
+   `app/core/sessions.py` + `app/models/session.py` (sesiones revocables, no JWT),
+   `app/services/auth_flow.py`, `app/api/players.py` (rutas `/api/players/*`, reemplazan a
+   `app/api/v1/endpoints/auth.py`/`users.py`, que se **eliminaron**). 59 tests pasan contra
+   SQLite en memoria. **Pendiente real:** aplicar la migración y probar contra Supabase
+   reactivado con correo real; ver detalle completo en `CLAUDE.md` (checkpoint 7 oct).
 
 **No tocar:** `app/schemas/challenge.py`, `app/services/challenge_generator.py`,
 `app/services/ai_advisor.py`, `challenges/templates/` — son de la Persona 2.
@@ -138,8 +136,9 @@ Together AI no responde o devuelve algo inválido) — hoy esa función solo pro
   alcance de tareas; puede dejarlo como el placeholder de `.env.example` mientras no toque la
   base de datos.
 
-**No tocar:** `app/db/`, `app/models/user.py`, `app/core/security.py`,
-`app/api/v1/endpoints/auth.py`, `migrations/` — son de la Persona 1.
+**No tocar:** `app/db/`, `app/models/user.py`, `app/models/session.py`, `app/core/security.py`,
+`app/core/sessions.py`, `app/services/auth_flow.py`, `app/services/email.py`,
+`app/api/players.py`, `migrations/` — son de la Persona 1.
 
 ## Estado de la fusión (merge)
 

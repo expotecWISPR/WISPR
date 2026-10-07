@@ -21,5 +21,9 @@ Thumbs.db
 # Retos generados (instancias por usuario, no van en Git)
 challenges/generated/
 
+# Códigos MFA en "modo desarrollo" (ver app/services/email.py) — contienen
+# códigos de verificación reales de pruebas locales, no van en Git.
+backend/data/outbox/
+
 # Scripts temporales de generación de docs
 docs/generar_stack.py

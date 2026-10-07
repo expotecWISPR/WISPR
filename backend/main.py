@@ -8,11 +8,28 @@ Para correrlo en desarrollo (desde la carpeta backend/):
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 
+from app.api.players import AuthRequiredError
+from app.api.players import router as players_router
 from app.api.v1 import api_router
 from app.core.config import settings
 
 app = FastAPI(title="WISPR API", version="0.1.0")
+
+
+@app.exception_handler(AuthRequiredError)
+async def handle_auth_required(request: Request, exc: AuthRequiredError) -> JSONResponse:
+    """
+    Traduce una sesión inválida/vencida a la respuesta exacta que espera
+    el frontend: `auth: "required"` lo distingue de un 401 por contraseña
+    incorrecta en /login, que no lleva ese campo.
+    """
+    return JSONResponse(
+        status_code=401,
+        content={"ok": False, "auth": "required", "error": "Tu sesión expiró o no es válida. Inicia sesión de nuevo."},
+    )
 
 # CORS: la app de Electron corre en su propio proceso, en un origen
 # distinto al de este servidor, así que el navegador bloquearía sus
@@ -27,6 +44,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# /api/players/*: calza exacto con lo que ya llama wispr_terminal_professional
+# (ver app/api/players.py). /api/v1/*: queda para endpoints futuros que no
+# vienen de esa migración (challenges, flags, scoreboard — todavía vacíos).
+app.include_router(players_router, prefix="/api/players")
 app.include_router(api_router, prefix="/api/v1")
 
 

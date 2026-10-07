@@ -23,16 +23,17 @@ Decisiones clave a recordar:
   genera el archivo/binario directamente ni inventa mecanismos nuevos. Detalle completo en
   `docs/pipeline_ia_retos.md`. Dataset de ~500 ejemplos curado por un compañero del equipo.
 * Redis, Celery y MinIO fueron evaluados y descartados explícitamente.
-* Auth con verificación de correo (MFA) decidida el 13 sep: registro **y** login exigen un
-  código de 6 dígitos enviado al correo (doble capa). El modelo `User` se amplía con
-  `full_name`, `gender`, `role` (estudiante/profesor/admin); el `username` se reutiliza como
-  handle. El rol se deriva del dominio institucional y cualquier otro correo entra como
-  estudiante. Envío por `smtplib` con fallback a modo dev; códigos en memoria (MVP de una sola
-  instancia). Estas funciones se prototiparon por error en un frontend Node aparte
-  (`wispr_terminal_professional`) y se **migran a FastAPI** (trabajo de Persona 1, no toca
-  archivos de Persona 2). El Workspace del colegio rechaza correo externo (rebote 550): para
-  correos institucionales hará falta lista blanca o SMTP interno del colegio. Detalle en
-  `CLAUDE.md`.
+* Auth con verificación de correo (MFA) decidida el 13 sep, **migrada a FastAPI el 7 oct**:
+  registro **y** login exigen un código de 6 dígitos enviado al correo (doble capa). El modelo
+  `User` se amplió con `full_name`, `gender`, `role` (estudiante/profesor/admin); el `username`
+  se reutiliza como handle. El rol se deriva del dominio institucional y cualquier otro correo
+  entra como estudiante. Envío por `smtplib` con fallback a modo dev; códigos en memoria (MVP
+  de una sola instancia). Sesiones **revocables respaldadas en Supabase** (token opaco + hash
+  SHA-256 en una tabla), no JWT — decisión del 7 oct, para poder revocar de verdad al cerrar
+  sesión o bloquear una cuenta. Rutas montadas en `/api/players/*` (sin prefijo `/v1`) para
+  calzar exacto con lo que ya llama el frontend `wispr_terminal_professional` (prototipo Node
+  fuera de este repo, de donde se migró la lógica real). Pendiente: aplicar la migración de
+  Alembic y probar contra Supabase reactivado. Detalle en `CLAUDE.md`.
 * `feature/retos-ia-persona2` se fusionó a `main` el 7 oct: el pipeline de generación de retos
   con IA (`ChallengeSpec`, `TECHNIQUE_REGISTRY` con `iv_reuse_wep`/`xor_singlebyte`,
   `ai_advisor.py`, templates, 25 tests) ya es código real en `main`, no solo diseño. Decisión

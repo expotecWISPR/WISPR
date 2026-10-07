@@ -14,4 +14,5 @@ Submission, Category), se agrega su import acá.
 
 from app.db.session import Base  # noqa: F401
 
+from app.models.session import Session  # noqa: F401
 from app.models.user import User  # noqa: F401
