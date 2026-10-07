@@ -380,16 +380,23 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * **(Reemplazado el 7 oct)** `app/api/v1/endpoints/auth.py`/`users.py` (login simple sin MFA,
   JWT stateless) se **eliminaron** — ver el bullet de migración de auth en "Decisiones de
   arquitectura" más arriba, y el siguiente bullet.
-* **Auth con MFA + sesiones revocables, migrado de `wispr_terminal_professional` (7 oct):**
-  `app/api/players.py` (rutas `/api/players/*`), `app/services/auth_flow.py` (registro, login,
-  bloqueo por fuerza bruta — lógica migrada 1:1 del prototipo Node), `app/core/sessions.py` +
-  modelo `app/models/session.py` (sesiones revocables respaldadas en una tabla nueva, no JWT),
-  `app/services/email.py` (envío por `smtplib` con fallback a modo desarrollo), migración
-  Alembic `27e315b1d2f6` (**todavía no aplicada** — Supabase sigue pausado). 59 tests pasan
-  (`pytest` desde `backend/`): 20 en `tests/unit/test_auth_flow.py` (SQLite en memoria) + 4 de
-  integración HTTP en `tests/integration/test_players_api.py` + los 35 ya existentes.
-  **Pendiente real: reactivar Supabase, aplicar la migración, y probar el flujo completo
-  (registro→verificación→login→MFA→`/me`) con correo real antes de dar esto por cerrado.**
+* **Auth con MFA + sesiones revocables, migrado de `wispr_terminal_professional` (7 oct) —
+  verificado contra Supabase real el mismo día.** `app/api/players.py` (rutas `/api/players/*`),
+  `app/services/auth_flow.py` (registro, login, bloqueo por fuerza bruta — lógica migrada 1:1
+  del prototipo Node), `app/core/sessions.py` + modelo `app/models/session.py` (sesiones
+  revocables respaldadas en una tabla nueva, no JWT), `app/services/email.py` (envío por
+  `smtplib` con fallback a modo desarrollo). Migración Alembic `27e315b1d2f6` **aplicada** a
+  Supabase (verificado: `public.users` tiene las columnas nuevas, `public.sessions` existe).
+  59 tests automáticos pasan contra SQLite en memoria (20 en `tests/unit/test_auth_flow.py` +
+  4 de integración HTTP en `tests/integration/test_players_api.py` + los 35 ya existentes) —
+  además se corrió **manualmente el flujo completo contra la Supabase real** (registro → fila
+  real creada → `/me` → login con MFA → logout revoca la sesión de verdad (fila borrada, no
+  solo vencida) → bloqueo tras 5 fallos), con un usuario de prueba que se borró al terminar
+  (`public.users` y `public.sessions` quedaron en 0 filas, confirmado). **Nota:** esa prueba
+  manual no quedó como test automatizado en el repo (pega contra un servicio externo real); si
+  se necesita repetirla, el script ya no existe (vivía en el scratchpad de la sesión).
+  **Sigue pendiente:** la parte de "entrelazar frontend y backend" de verdad — apuntar
+  `wispr_terminal_professional` a este servidor y probarlo con la UI real, no solo por API.
 * **Nota recurrente — Supabase se pausa solo:** plan gratuito, se pausa tras varios días sin
   actividad. Ya pasó dos veces. Si algo que antes funcionaba da
   `could not translate host name ... to address`, no es un bug de código — reactivar en
@@ -427,16 +434,16 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 4. ~~Implementar `auth.py`, `users.py`, router de v1 y `main.py`~~ ✅ Hecho — **reemplazado el
    7 oct** por la migración de auth con MFA (siguiente punto); ya no existen esos archivos.
 5. ~~Fusionar `feature/retos-ia-persona2` a `main`~~ ✅ Hecho (7 oct) — ver "Progreso técnico".
-6. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Código escrito y probado
-   (7 oct, 59 tests, SQLite en memoria — ver "Progreso técnico"). **Falta antes de cerrarlo
-   de verdad:**
-   a) Reactivar Supabase y aplicar la migración `27e315b1d2f6`; borrar usuarios de prueba.
-   b) Probar el flujo completo con correo real (`SMTP_*` en `.env`) contra Supabase.
-   c) Rotar la contraseña de aplicación de Gmail expuesta en
-      `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba).
-   d) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
-      este backend y confirmar que el flujo real (no solo las pruebas) funciona de punta a
-      punta — esta es la pieza de "entrelazar frontend y backend" que falta todavía.
+6. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Hecho, migración aplicada y
+   **verificado contra Supabase real** (7 oct) — ver "Progreso técnico". Queda:
+   a) Probar el flujo con correo real (`SMTP_*` en `.env`) — lo verificado hoy usó el modo
+      desarrollo (`devCode`), nunca se configuró SMTP de verdad.
+   b) Rotar la contraseña de aplicación de Gmail expuesta en
+      `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba) — sigue
+      sin resolver.
+   c) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
+      este backend y confirmar que el flujo real (no solo la API) funciona de punta a punta
+      con la UI real — esta es la pieza de "entrelazar frontend y backend" que falta todavía.
 7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.
