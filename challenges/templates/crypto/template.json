@@ -1,0 +1,10 @@
+{
+  "id": "crypto-xor-01",
+  "difficulty": "easy",
+  "category": "crypto",
+  "description": "Interceptaste un archivo binario en una transferencia sospechosa. El analista de la empresa cree que el atacante usó un cifrado 'simple' porque tenía apuro. Descifrá el archivo y encontrá la flag.",
+  "technique": "xor_singlebyte",
+  "flag": "FLAG{xor_de_un_byte_es_debil}",
+  "hint": "El archivo está cifrado con XOR contra una sola llave de un byte (0-255). Con tan pocas posibilidades, no hace falta descifrar nada matemáticamente: probalas todas.",
+  "solution": "1) Leer el archivo binario. 2) Para cada llave posible de 0 a 255, calcular bytes(b ^ llave for b in ciphertext). 3) Intentar decodificar el resultado como UTF-8 y verificar si empieza con 'FLAG{' y termina en '}'. 4) La única llave que produce texto legible es la correcta, y ese texto es la flag."
+}

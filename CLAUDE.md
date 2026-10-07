@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 13 de septiembre de 2026.
+**Última actualización:** 7 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -273,6 +273,20 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 * **Equipo de backend ahora son 2 personas (26 ago).** El trabajo se dividió por archivos para
   evitar colisiones de Git — ver `.claude/memory/reparto_tareas.md` **antes de tocar código**
   si hay más de una persona trabajando en el backend el mismo día.
+* **Fusión de `feature/retos-ia-persona2` a `main` (7 oct).** El pipeline de generación de
+  retos con IA diseñado en `docs/pipeline_ia_retos.md` ya es código real en `main`: `ChallengeSpec`,
+  `TECHNIQUE_REGISTRY` (`iv_reuse_wep`, `xor_singlebyte`), `ai_advisor.py`, las plantillas de
+  `challenges/templates/` y 25 tests. Sin conflictos de código al fusionar — las dos líneas de
+  trabajo nunca tocaron los mismos archivos; solo hubo que resolver a mano la documentación
+  (este archivo y `.claude/memory/`). **Decisión del mismo día:** el fine-tuning con LoRA queda
+  en pausa (se está resolviendo por separado); mientras tanto `ai_advisor.py` sigue con
+  **prompting simple** contra el modelo base de Together AI, sin bloquear el resto del pipeline.
+* Política de equipo (26 ago, documentada solo en la rama de Persona 2 hasta esta fusión):
+  nadie commitea directo a `main`, cada persona trabaja en su rama `feature/<algo>` y junta con
+  Pull Request. No se cumplió entre el 26 ago y el 7 oct por esto mismo — vale la pena
+  re-confirmarla con el equipo ahora que ya está visible para ambos en `main`.
+* Versión de Python para el venv del backend: usar **Python 3.12**, no la más nueva instalada
+  en la máquina (ej. 3.14) — ver nota de `psycopg2-binary` en "Progreso técnico" más abajo.
 * **Autenticación con verificación de correo (MFA) + perfil de usuario ampliado (nuevo, 13 sep).**
   Decisión de equipo: el registro **y** el login exigen un código de verificación de 6 dígitos
   enviado al correo (doble capa: contraseña + posesión del correo). Se decidió MFA en ambos
@@ -306,7 +320,8 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 ## Progreso técnico
 
 * Repositorio Git inicializado, con historial de commits.
-* `backend/venv/` creado; dependencias instaladas y fijadas en `backend/requirements.txt`
+* `backend/venv/` creado (usar **Python 3.12**, no la versión más nueva instalada en la
+  máquina — ver nota arriba); dependencias instaladas y fijadas en `backend/requirements.txt`
   (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, email-validator,
   psycopg2-binary, python-jose, bcrypt, python-multipart, together, boto3, scapy).
 * `backend/.env` configurado con `DATABASE_URL` de Supabase — **conexión verificada**
@@ -347,9 +362,28 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `could not translate host name ... to address`, no es un bug de código — reactivar en
   supabase.com → proyecto → "Restore project" (1-2 min) antes de asumir que algo se rompió.
   Detalle en `.claude/memory/reparto_tareas.md`.
-* Diseño del pipeline de generación de retos con IA documentado (`docs/pipeline_ia_retos.md`);
-  aún no implementado en código. Un compañero de equipo está curando el dataset (~500 ejemplos)
-  para el fine-tuning con LoRA.
+* **Pipeline de generación de retos con IA implementado, probado y fusionado a `main` (26 ago,
+  Persona 2 — fusión el 7 oct)** — las 4 piezas de esa línea del reparto están hechas:
+  - `app/schemas/challenge.py`: `ChallengeSpec` de Pydantic, con `Literal` para
+    category/difficulty/technique (el registro fijo) y validación de formato de flag
+    (`FLAG{...}`).
+  - `app/services/challenge_generator.py`: `TECHNIQUE_REGISTRY` con **ambas** técnicas del MVP
+    implementadas — `generate_wep_reused_iv_pcap` (genera un `.pcap` real con Scapy, RC4 propio,
+    IV reutilizado) y `generate_xor_challenge` (XOR de un solo byte). Las dos se probaron
+    simulando el ataque real (recuperación de flag sin conocer la llave), no solo verificando
+    que no tiran error.
+  - `app/services/ai_advisor.py`: llamada a Together AI (prompting simple, sin fine-tuning
+    todavía) que devuelve el JSON crudo sin validar. Probado con un cliente Together simulado
+    (todavía no probado contra la API real — falta un `TOGETHER_API_KEY` real en `.env`).
+    **Decisión del 7 oct:** el fine-tuning con LoRA queda en pausa mientras se resuelve por
+    separado; mientras tanto el pipeline usa prompting simple contra el modelo base, sin
+    bloquear el resto.
+  - `challenges/templates/network/template.json` y `challenges/templates/crypto/template.json`:
+    llenados con ejemplos reales, validados contra `ChallengeSpec` y contra los generadores.
+  - `backend/tests/unit/`: 25 tests con `unittest` de la librería estándar (sin agregar
+    `pytest` a `requirements.txt` a propósito, para no tocar un archivo que el equipo ya trata
+    como compartido/sensible a conflictos). Correr con:
+    `venv\Scripts\python.exe -m unittest discover -s tests/unit -v`
 
 ## Pendiente (próximos pasos, en orden)
 
@@ -361,8 +395,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    unitarias pasan. **Falta verificar el flujo completo con la base de datos real** (bloqueado
    por Supabase pausado — reactivar y probar `POST /register` → `POST /login` → `GET
    /users/me` con un token real; borrar el usuario de prueba después).
-5. **Migración de auth con MFA por correo + perfil ampliado (Persona 1, decidido 13 sep).**
-   En orden:
+5. ~~Fusionar `feature/retos-ia-persona2` a `main`~~ ✅ Hecho (7 oct) — ver "Progreso técnico".
+6. **(En curso, 7 oct) Migración de auth con MFA por correo + perfil ampliado (Persona 1).**
+   El equipo confirmó hoy que esto se hace ahora: el flujo vive prototipado en un frontend
+   aparte (fuera de este repo) y hay que migrarlo a FastAPI + Supabase, no seguir sirviéndolo
+   desde el frontend. En orden:
    a) Ampliar el modelo `User` (`full_name`, `gender`, `role`) y crear la nueva migración
       Alembic; aplicarla a Supabase reactivado y borrar los usuarios de prueba al terminar.
    b) `app/services/email.py` — envío por `smtplib` con fallback a modo desarrollo; agregar las
@@ -371,11 +408,14 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
       `verify` y `login-verify` devuelven el JWT. Rol por dominio institucional (cualquier otro
       correo → estudiante). Ajustar `schemas/user.py`.
    d) Almacén de códigos en memoria (dict). Tests unitarios (sin BD) + prueba del envío real.
-6. Crear bucket S3 + rol IAM, integrar con `boto3`.
-7. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-8. Implementar el schema `ChallengeSpec` en `app/schemas/challenge.py` (ver
-   `docs/pipeline_ia_retos.md`).
-9. Integrar Together AI en `app/services/ai_advisor.py` y `challenge_generator.py`.
+7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
+   `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
+   `challenges/generated/` local.
+8. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
+9. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
+   agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
+   Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El
+   fine-tuning con LoRA queda fuera de esto hasta que se resuelva por separado.
 
 ---
 

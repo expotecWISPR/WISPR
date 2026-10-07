@@ -33,6 +33,20 @@ Decisiones clave a recordar:
   archivos de Persona 2). El Workspace del colegio rechaza correo externo (rebote 550): para
   correos institucionales hará falta lista blanca o SMTP interno del colegio. Detalle en
   `CLAUDE.md`.
+* `feature/retos-ia-persona2` se fusionó a `main` el 7 oct: el pipeline de generación de retos
+  con IA (`ChallengeSpec`, `TECHNIQUE_REGISTRY` con `iv_reuse_wep`/`xor_singlebyte`,
+  `ai_advisor.py`, templates, 25 tests) ya es código real en `main`, no solo diseño. Decisión
+  del mismo día: el fine-tuning con LoRA queda en pausa (se está resolviendo por separado) y
+  mientras tanto `ai_advisor.py` usa el modelo base de Together AI por **prompting simple**.
+* El venv del backend debe crearse con **Python 3.12**, no la versión más nueva instalada en la
+  máquina (ej. 3.14) — `psycopg2-binary` no tenía wheel para 3.14 en Windows al 26 ago 2026 y
+  falla al compilar desde código fuente sin PostgreSQL local instalado. Sigue sin confirmarse si
+  `psycopg2-binary==2.9.12` (ya en `requirements.txt`) resuelve esto en una instalación real.
+* Política de equipo (26 ago): nadie commitea directo a `main`, cada persona trabaja en su
+  rama `feature/<algo>` y junta con Pull Request. En la práctica esto no se cumplió entre el 26
+  ago y el 7 oct porque esta regla vivía solo en la rama sin fusionar — Persona 1 siguió
+  commiteando directo a `main`. Vale la pena re-confirmarla con el equipo ahora que ya está
+  fusionada, no asumir que se retoma sola.
 
 **Por qué importa:** estas decisiones ya resolvieron ambigüedades que se discutieron a propósito.
 Si una sugerencia futura (propia o de otra IA, ej. ChatGPT/Gemini) reintroduce Fargate, ALB,
