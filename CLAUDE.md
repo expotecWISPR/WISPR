@@ -255,7 +255,16 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   CPU (`--memory`, `--cpus` de Docker) para no afectar a otros usuarios en la misma instancia.
 * Arquitectura AWS del MVP: **una sola instancia EC2** (nginx + FastAPI + Docker host juntos),
   subred pública, un Security Group como único firewall, sin NAT Gateway ni subredes privadas.
-  Detalle completo en `docs/arquitectura_mvp.md`.
+  Detalle completo en `docs/arquitectura_mvp.md`. **Reconfirmado el 7 oct** después de ver el
+  alcance real de `wispr_terminal_professional` (terminal Kali por jugador vía Docker +
+  node-pty/ws, lecciones, panel admin, grupos): la cantidad de archivos/funcionalidades no
+  cambia el cálculo — lo que de verdad pesa en la instancia es cuántos contenedores Kali
+  concurrentes corren a la vez, no cuánto código hay. Para EXPOTEC (demo, 4 personas en un solo
+  dispositivo) una instancia mínima (`t3.small`/`t3.medium`) sobra. Para un piloto real de aula
+  (20-30 estudiantes concurrentes) sigue siendo **una sola instancia**, solo que de un tamaño
+  mayor — eso se dimensiona con datos reales de uso de RAM/CPU de un contenedor Kali cuando
+  llegue el momento, no ahora. Fargate/ALB siguen descartados por lo mismo de siempre: esa
+  complejidad solo se justifica en escalas de cientos de usuarios concurrentes.
 * También existe `docs/arquitectura_produccion.md`: arquitectura de nivel empresarial (3
   subredes, NAT Gateway, Defensa en Profundidad) documentada como referencia/objetivo para la
   defensa ante el profesor — **no es la que se despliega** durante el desarrollo.
