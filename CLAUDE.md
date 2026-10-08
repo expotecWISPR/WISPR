@@ -401,8 +401,19 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   confirmado) y el servidor de prueba detenido. **Nota:** nada de esto quedó como test
   automatizado en el repo (manda correos reales y pega contra servicios externos reales) — el
   resultado queda documentado acá, no hay script que repetirlo.
-  **Sigue pendiente:** la parte de "entrelazar frontend y backend" de verdad — apuntar
-  `wispr_terminal_professional` a este servidor y probarlo con la UI real, no solo por API.
+* **Frontend y backend "entrelazados" — probado con la UI real (7 oct).** Se instaló Playwright
+  (`pip install playwright` + `playwright install chromium`; no hay Node/npm en este entorno, no
+  hacía falta). Con `wispr_terminal_professional` servido como archivos estáticos (sin su
+  `server.js`, que no hacía falta para esto) y su único cambio temporal —
+  `<meta name="wispr-api" content="http://127.0.0.1:8799">`, revertido al terminar — un navegador
+  headless real completó "Crear cuenta" → formulario de registro (coincide **exacto** con el
+  payload que ya migramos: `name`/`handle`/`gender`/`password`/`email`) → envío → la pantalla de
+  MFA ("Verificación de correo institucional", badge `ESTUDIANTE`, correo enmascarado,
+  `Verificar y entrar`) apareció de verdad, con el toast de confirmación del correo real enviado.
+  Captura guardada en el scratchpad de la sesión (no en el repo). Esto confirma que el frontend
+  terminado puede hablar con este backend **sin que el equipo de frontend cambie una sola línea**
+  — solo apuntar esa `<meta>` al backend real cuando se despliegue. `wispr_terminal_professional`
+  quedó intacto (el único archivo tocado, `index.html`, se restauró con un backup).
 * **Nota recurrente — Supabase se pausa solo:** plan gratuito, se pausa tras varios días sin
   actividad. Ya pasó dos veces. Si algo que antes funcionaba da
   `could not translate host name ... to address`, no es un bug de código — reactivar en
@@ -447,9 +458,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
       `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba) — sigue
       sin resolver. La que quedó copiada en `backend/.env` es la correcta (la de
       `wispr_terminal_professional/.env`, `wispr.info@gmail.com`), no la filtrada.
-   b) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
-      este backend y confirmar que el flujo real (no solo la API) funciona de punta a punta
-      con la UI real — esta es la pieza de "entrelazar frontend y backend" que falta todavía.
+   b) ~~Apuntar el frontend a este backend y confirmar que el flujo real funciona con la UI~~
+      ✅ Hecho (7 oct, con Playwright — ver "Progreso técnico"). Falta que el equipo decida
+      **dónde vive de forma permanente** esa URL del backend (hoy el `<meta name="wispr-api">`
+      de `wispr_terminal_professional/index.html` sigue vacío = mismo origen; hay que decidir
+      si ese frontend termina sirviéndose junto al backend en la misma instancia EC2 o separado).
 7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.
