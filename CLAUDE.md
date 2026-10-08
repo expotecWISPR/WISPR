@@ -388,13 +388,19 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `smtplib` con fallback a modo desarrollo). Migración Alembic `27e315b1d2f6` **aplicada** a
   Supabase (verificado: `public.users` tiene las columnas nuevas, `public.sessions` existe).
   59 tests automáticos pasan contra SQLite en memoria (20 en `tests/unit/test_auth_flow.py` +
-  4 de integración HTTP en `tests/integration/test_players_api.py` + los 35 ya existentes) —
-  además se corrió **manualmente el flujo completo contra la Supabase real** (registro → fila
-  real creada → `/me` → login con MFA → logout revoca la sesión de verdad (fila borrada, no
-  solo vencida) → bloqueo tras 5 fallos), con un usuario de prueba que se borró al terminar
-  (`public.users` y `public.sessions` quedaron en 0 filas, confirmado). **Nota:** esa prueba
-  manual no quedó como test automatizado en el repo (pega contra un servicio externo real); si
-  se necesita repetirla, el script ya no existe (vivía en el scratchpad de la sesión).
+  4 de integración HTTP en `tests/integration/test_players_api.py` + los 35 ya existentes).
+  Además se corrió **manualmente el flujo completo contra la Supabase real, con SMTP real**
+  (mismas credenciales de `wispr_terminal_professional/.env` — `SMTP_USER=wispr.info@gmail.com`,
+  ya copiadas a `backend/.env`): `uvicorn` corriendo de verdad (no `TestClient` en un proceso de
+  un solo request — así los códigos pendientes, en memoria, sobreviven entre peticiones igual
+  que en producción) → registro → **correo real recibido**, verificado con el código real →
+  cuenta creada en Supabase → `/me` → login → **segundo correo real**, verificado con su código
+  → segunda sesión → `logout` revoca **solo esa sesión** (confirmado: la primera, la del
+  registro, seguía viva) → bloqueo tras 5 fallos probado por separado contra Supabase también.
+  Usuario y sesiones de prueba borrados al terminar (`public.users`/`public.sessions` en 0 filas,
+  confirmado) y el servidor de prueba detenido. **Nota:** nada de esto quedó como test
+  automatizado en el repo (manda correos reales y pega contra servicios externos reales) — el
+  resultado queda documentado acá, no hay script que repetirlo.
   **Sigue pendiente:** la parte de "entrelazar frontend y backend" de verdad — apuntar
   `wispr_terminal_professional` a este servidor y probarlo con la UI real, no solo por API.
 * **Nota recurrente — Supabase se pausa solo:** plan gratuito, se pausa tras varios días sin
@@ -435,13 +441,13 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    7 oct** por la migración de auth con MFA (siguiente punto); ya no existen esos archivos.
 5. ~~Fusionar `feature/retos-ia-persona2` a `main`~~ ✅ Hecho (7 oct) — ver "Progreso técnico".
 6. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Hecho, migración aplicada y
-   **verificado contra Supabase real** (7 oct) — ver "Progreso técnico". Queda:
-   a) Probar el flujo con correo real (`SMTP_*` en `.env`) — lo verificado hoy usó el modo
-      desarrollo (`devCode`), nunca se configuró SMTP de verdad.
-   b) Rotar la contraseña de aplicación de Gmail expuesta en
+   **verificado contra Supabase real, con correo real** (7-8 oct) — ver "Progreso técnico".
+   Queda:
+   a) Rotar la contraseña de aplicación de Gmail expuesta en
       `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba) — sigue
-      sin resolver.
-   c) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
+      sin resolver. La que quedó copiada en `backend/.env` es la correcta (la de
+      `wispr_terminal_professional/.env`, `wispr.info@gmail.com`), no la filtrada.
+   b) Apuntar el frontend (`wispr_terminal_professional`, meta `wispr-api` en `index.html`) a
       este backend y confirmar que el flujo real (no solo la API) funciona de punta a punta
       con la UI real — esta es la pieza de "entrelazar frontend y backend" que falta todavía.
 7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
