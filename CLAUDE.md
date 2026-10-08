@@ -472,14 +472,38 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
       **dónde vive de forma permanente** esa URL del backend (hoy el `<meta name="wispr-api">`
       de `wispr_terminal_professional/index.html` sigue vacío = mismo origen; hay que decidir
       si ese frontend termina sirviéndose junto al backend en la misma instancia EC2 o separado).
-7. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
-   `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
-   `challenges/generated/` local.
-8. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-9. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
+7. **(Próxima sesión, decidido 7 oct) Retos, envíos de flags y ranking — mismo patrón que el
+   auth: migrar 1:1 la lógica que ya funciona en `wispr_terminal_professional`, no diseñar
+   desde cero.** Ese prototipo es, en la práctica, el diseño ya validado de lo que el backend
+   debe hacer — igual que pasó con `beginRegistration`/`beginLogin`. Hoy `app/models/challenge.py`,
+   `app/models/submission.py`, `app/services/flag_validator.py`, `app/services/scoring.py`,
+   `app/api/v1/endpoints/challenges.py`/`flags.py`/`scoreboard.py` siguen vacíos (scaffold
+   inicial, sin tocar). En orden:
+   a) `app/models/challenge.py` + `app/models/submission.py` — tablas reales en Supabase,
+      mirando cómo `server.js` modela esto en `lab/data/players.json`
+      (`solved`/`attempts`/`submissions` por jugador) y en `lab/challenges/`.
+   b) `app/services/flag_validator.py` — comparación de flag de tiempo constante (mismo patrón
+      que `verify_password`/los códigos MFA).
+   c) `app/services/scoring.py` — puntos por dificultad, migrado de la lógica real del
+      prototipo (`recordSubmission`/`currentStreak` en `server.js`).
+   d) Endpoints reales calzando el contrato que ya documentó el frontend en
+      `wispr_terminal_professional/docs/BACKEND-PENDIENTE.md`: `GET /api/challenges`,
+      `GET /api/challenges/active`, `POST /api/submissions`, `GET /api/ranking`,
+      `POST /api/progress` (lecciones).
+   e) Igual que con el auth: probar contra Supabase real y entrelazar con la UI real antes de
+      darlo por cerrado.
+   Se deja para después de esto, a propósito (no bloquea ni es necesario para la demo de
+   EXPOTEC — 4 personas, un dispositivo): terminal Kali (Docker + node-pty + WebSocket, ya
+   estaba decidido dejarlo para más adelante), S3 + IAM, y la instancia EC2 — son
+   infraestructura de despliegue, no el loop jugable.
+8. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
    agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
    Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El
    fine-tuning con LoRA queda fuera de esto hasta que se resuelva por separado.
+9. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
+   `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
+   `challenges/generated/` local.
+10. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
 
 ---
 
