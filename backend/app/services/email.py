@@ -67,15 +67,34 @@ def _deliver_dev_code(email: str, code: str, reason: str) -> EmailResult:
     return EmailResult(ok=True, dev=True, code=code)
 
 
+def _fallback(email: str, code: str, reason: str) -> EmailResult:
+    """
+    Qué hacer cuando el correo no se puede enviar de verdad.
+
+    En desarrollo: modo desarrollo (el código va al log y a la respuesta como
+    `devCode`). En producción (`ENVIRONMENT=production`) eso anularía el MFA
+    — cualquiera vería el código sin tener acceso al correo — así que se
+    falla y las rutas responden "No se pudo enviar el correo de
+    verificación." Tampoco se escribe el código en el log: en el servidor los
+    logs terminan en CloudWatch, y ahí también sería una filtración.
+    Pendiente bloqueante #3 de `wispr_terminal_professional/docs/BACKEND-PENDIENTE.md`.
+    """
+    if settings.ENVIRONMENT == "production":
+        logger.error("[MFA] %s No se envió el código a %s (producción: sin modo desarrollo).", reason, email)
+        return EmailResult(ok=False, error=reason)
+    return _deliver_dev_code(email, code, reason)
+
+
 def send_verification_code(email: str, code: str) -> EmailResult:
     """
     Envía (o simula) el correo con el código de verificación.
 
     Nunca lanza una excepción hacia afuera: si el SMTP real falla, cae al
-    modo desarrollo en vez de propagar el error (igual que el prototipo).
+    modo desarrollo en vez de propagar el error (igual que el prototipo) —
+    salvo en producción, ver `_fallback`.
     """
     if not settings.SMTP_HOST:
-        return _deliver_dev_code(email, code, "Sin SMTP configurado (modo desarrollo).")
+        return _fallback(email, code, "Sin SMTP configurado.")
 
     message = EmailMessage()
     message["Subject"] = _SUBJECT
@@ -94,4 +113,4 @@ def send_verification_code(email: str, code: str) -> EmailResult:
         return EmailResult(ok=True, dev=False)
     except (smtplib.SMTPException, OSError) as error:
         logger.error("No se pudo enviar el correo de verificación: %s", error)
-        return _deliver_dev_code(email, code, f"Envío SMTP falló ({error}); respaldo a modo desarrollo.")
+        return _fallback(email, code, f"Envío SMTP falló ({error}).")

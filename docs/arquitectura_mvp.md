@@ -4,6 +4,9 @@ Esta es la arquitectura de infraestructura que se usa durante el desarrollo del 
 demostración en EXPOTEC. Es una versión simplificada de [arquitectura_produccion.md](arquitectura_produccion.md),
 pensada para el nivel del equipo, el tiempo disponible y el presupuesto real.
 
+> **¿Vas a desplegar el backend?** Los pasos concretos están en la sección **CONFIG AWS**, al final
+> de este documento.
+
 ---
 
 ## Diagrama de infraestructura
@@ -177,3 +180,73 @@ reto, no con hardware separado.
 
 Si en pruebas con varios usuarios simultáneos el `t3.medium` se queda corto de memoria, subir a
 un `t3.large` es un cambio de una sola línea en la configuración de AWS, sin rediseñar nada.
+
+---
+
+# CONFIG AWS
+
+Lista de pasos concretos para que el backend (FastAPI) funcione en la instancia EC2. Revisado contra
+el código real el 11 oct 2026. Los marcados 🔴 hacen que el backend **no arranque o no funcione**
+si se omiten; los 🟡 son de **seguridad** y son obligatorios antes de abrirlo al público.
+
+### 🔴 1. `DATABASE_URL`: usar el *Session pooler* de Supabase, no la conexión directa
+
+La conexión directa (`db.<ref>.supabase.co:5432`) **solo tiene dirección IPv6** (verificado: no
+resuelve a IPv4). Una EC2 en la VPC por defecto solo habla IPv4, así que el backend no podría
+conectarse a la base de datos.
+
+- En supabase.com → proyecto → **Connect** → **Session pooler** → copiar esa URL.
+- Tiene la forma `postgresql://postgres.<ref>:<contraseña>@aws-0-<región>.pooler.supabase.com:5432/postgres`.
+- Usar el **Session** pooler (puerto 5432), no el *Transaction* pooler (6543): este último no es
+  compatible con cómo SQLAlchemy y Alembic manejan las conexiones por defecto.
+- Ponerla en el `.env` del servidor. Es solo configuración: no hay que tocar código.
+
+### 🔴 2. `uvicorn` con **un solo worker**
+
+Los códigos MFA pendientes viven en la memoria del proceso (`app/services/auth_flow.py`). Con
+varios workers, un código creado en un proceso no existe en los otros y la verificación falla al
+azar. Correr:
+
+```bash
+uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+(`127.0.0.1`: solo nginx habla con uvicorn; el puerto 8000 no se abre en el Security Group.)
+Un solo worker sobra para EXPOTEC y para un aula. Si algún día hace falta más de uno, primero hay
+que mover los códigos pendientes a una tabla en la BD.
+
+### 🔴 3. Migraciones
+
+Después de configurar el `.env`, desde `backend/`:
+
+```bash
+alembic -c migrations/alembic.ini upgrade head
+```
+
+### 🟡 4. `ENVIRONMENT=production` en el `.env`
+
+Con este valor, si el correo no se puede enviar, el registro/login **falla** en vez de caer al
+"modo desarrollo" (que devuelve el código MFA en la respuesta y lo escribe en el log, anulando el
+MFA). Implementado en `app/services/email.py::_fallback` y probado en `tests/unit/test_email.py`.
+
+### 🟡 5. HTTPS con nginx
+
+Los tokens de sesión viajan en la cabecera `Authorization`: sin HTTPS se pueden robar. nginx
+termina TLS (certificado de Let's Encrypt con `certbot`, requiere un dominio apuntando a la IP
+elástica) y reenvía a `127.0.0.1:8000`. El WebSocket de la terminal, cuando exista, va por `wss://`.
+
+### 🟡 6. Restringir CORS
+
+`main.py` hoy acepta cualquier origen (`allow_origins=["*"]`). En producción, cambiarlo al dominio
+real del frontend.
+
+### ✅ Ya compatible (no requiere nada)
+
+- **SO recomendado:** Ubuntu 24.04 LTS (trae Python 3.12). Todas las dependencias de
+  `requirements.txt` tienen versión precompilada para Linux.
+- **Correo:** Gmail por el puerto 587 funciona desde EC2 (AWS solo restringe el puerto 25).
+- **Archivos de retos generados:** se guardan en `challenges/generated/` local — válido con una sola
+  instancia. Pasar a S3 es un paso posterior (punto 9 del plan en `CLAUDE.md`).
+- **Node.js:** el backend no lo necesita. Solo lo usan el frontend prototipo y la terminal Kali.
+- **Supabase pausado:** si la base de datos da `could not translate host name`, reactivar el
+  proyecto en supabase.com antes de asumir que algo del servidor está mal.
