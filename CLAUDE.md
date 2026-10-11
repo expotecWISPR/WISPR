@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 7 de octubre de 2026.
+**Última actualización:** 11 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -449,8 +449,32 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     llenados con ejemplos reales, validados contra `ChallengeSpec` y contra los generadores.
   - `backend/tests/unit/`: 25 tests con `unittest` de la librería estándar (sin agregar
     `pytest` a `requirements.txt` a propósito, para no tocar un archivo que el equipo ya trata
-    como compartido/sensible a conflictos). Correr con:
-    `venv\Scripts\python.exe -m unittest discover -s tests/unit -v`
+    como compartido/sensible a conflictos). **Actualizado 11 oct:** `pytest` ya está en
+    `requirements.txt` y los tests nuevos lo necesitan (fixtures). Correr TODO desde `backend/` con
+    `venv\Scripts\python.exe -m pytest` (Windows) o `venv/bin/python -m pytest` (Linux/Mac).
+
+* **Loop jugable migrado de `wispr_terminal_professional` (11 oct) — verificado contra Supabase
+  real.** Rama `feature/retos-envios-ranking`. Decisiones:
+  - **Flag unificada a `WISPR{...}`** (antes `FLAG{...}` en el pipeline Python): es la que ya
+    usan el frontend, los retos Wi-Fi y `ctf submit` de la terminal. Mismo regex que el prototipo.
+  - Tablas nuevas (migración `dba06aee3303`): `challenges`, `submissions` (cada intento),
+    `solves` (primer acierto, PK (user, reto) — impide sumar puntos dos veces aunque lleguen dos
+    envíos a la vez; probado con envíos simultáneos contra Postgres real), `challenge_instances`
+    (flag personal por jugador, vacía por ahora) y `lesson_progress`.
+  - `flag_validator.py` (flag personal si existe, si no la del catálogo; tiempo constante),
+    `scoring.py` (envíos, racha, progreso, ranking), `lessons.py`, `challenges.py` (forma
+    pública sin flag/solución, sembrado) y rutas en `app/api/challenges.py` montadas en `/api`
+    con el contrato exacto del frontend. El `playerId` que manda el frontend se ignora: el
+    jugador sale siempre de la sesión. `/api/players/me` ya devuelve el progreso real.
+  - Catálogo en `challenges/catalog/catalog.json`: los 8 retos Wi-Fi exportados tal cual del
+    prototipo + WEP y XOR del pipeline. Se carga con `python -m app.db.seed_challenges`
+    (idempotente; ya cargado en Supabase).
+  - Sin terminal Kali todavía: `/challenges/active` no arranca contenedores y
+    `/platform/status` informa Docker no disponible. `nextChallenge` siempre `None`.
+  - En producción (`ENVIRONMENT=production`) el MFA ya no cae a modo desarrollo.
+  - 87 tests pasan. Prueba manual con `uvicorn` real + Supabase: catálogo sin flags, flag XOR
+    recuperada del archivo descargado, envíos, `/me`, ranking, lecciones; usuario temporal
+    borrado al final (0 filas restantes).
 
 ## Pendiente (próximos pasos, en orden)
 
@@ -471,30 +495,16 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
       **dónde vive de forma permanente** esa URL del backend (hoy el `<meta name="wispr-api">`
       de `wispr_terminal_professional/index.html` sigue vacío = mismo origen; hay que decidir
       si ese frontend termina sirviéndose junto al backend en la misma instancia EC2 o separado).
-7. **(Próxima sesión, decidido 7 oct) Retos, envíos de flags y ranking — mismo patrón que el
-   auth: migrar 1:1 la lógica que ya funciona en `wispr_terminal_professional`, no diseñar
-   desde cero.** Ese prototipo es, en la práctica, el diseño ya validado de lo que el backend
-   debe hacer — igual que pasó con `beginRegistration`/`beginLogin`. Hoy `app/models/challenge.py`,
-   `app/models/submission.py`, `app/services/flag_validator.py`, `app/services/scoring.py`,
-   `app/api/v1/endpoints/challenges.py`/`flags.py`/`scoreboard.py` siguen vacíos (scaffold
-   inicial, sin tocar). En orden:
-   a) `app/models/challenge.py` + `app/models/submission.py` — tablas reales en Supabase,
-      mirando cómo `server.js` modela esto en `lab/data/players.json`
-      (`solved`/`attempts`/`submissions` por jugador) y en `lab/challenges/`.
-   b) `app/services/flag_validator.py` — comparación de flag de tiempo constante (mismo patrón
-      que `verify_password`/los códigos MFA).
-   c) `app/services/scoring.py` — puntos por dificultad, migrado de la lógica real del
-      prototipo (`recordSubmission`/`currentStreak` en `server.js`).
-   d) Endpoints reales calzando el contrato que ya documentó el frontend en
-      `wispr_terminal_professional/docs/BACKEND-PENDIENTE.md`: `GET /api/challenges`,
-      `GET /api/challenges/active`, `POST /api/submissions`, `GET /api/ranking`,
-      `POST /api/progress` (lecciones).
-   e) Igual que con el auth: probar contra Supabase real y entrelazar con la UI real antes de
-      darlo por cerrado.
-   Se deja para después de esto, a propósito (no bloquea ni es necesario para la demo de
-   EXPOTEC — 4 personas, un dispositivo): terminal Kali (Docker + node-pty + WebSocket, ya
-   estaba decidido dejarlo para más adelante), S3 + IAM, y la instancia EC2 — son
-   infraestructura de despliegue, no el loop jugable.
+7. ~~Retos, envíos de flags, ranking y progreso de lecciones~~ ✅ Hecho y **verificado contra
+   Supabase real** (11 oct) — ver "Progreso técnico". Rama `feature/retos-envios-ranking`.
+7b. **(Siguiente) Generación de archivos por jugador** (`challenge_instances`), empezando por
+   **deauth** (más simple: la flag es `WISPR{deauth_<bssid>}`, sin criptografía), luego PMKID y al
+   final WPA handshake. Migrar de `wispr_terminal_professional/pcap-wifi.js` +
+   `pcap-challenges.js` (~440 líneas; la mitad de texto de `challenge-instances.js` NO hace falta).
+   Hasta esto, los **8 retos Wi-Fi aparecen pero no se pueden resolver**: su flag real es por
+   jugador. Node v22 ya está instalado en esta máquina para comparar el `.pcap` de Node vs el de
+   Python. Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`.
+   Terminal Kali, S3 + IAM y la instancia EC2 siguen después, como estaba decidido.
 8. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
    agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
    Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El

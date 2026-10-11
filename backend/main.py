@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
+from app.api.challenges import router as challenges_router
 from app.api.players import AuthRequiredError
 from app.api.players import router as players_router
 from app.api.v1 import api_router
@@ -44,10 +45,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# /api/players/*: calza exacto con lo que ya llama wispr_terminal_professional
-# (ver app/api/players.py). /api/v1/*: queda para endpoints futuros que no
-# vienen de esa migración (challenges, flags, scoreboard — todavía vacíos).
+# /api/players/* y /api/{challenges,submissions,ranking,progress,...}: calzan
+# exacto con lo que ya llama wispr_terminal_professional (ver
+# app/api/players.py y app/api/challenges.py). /api/v1/*: queda para
+# endpoints futuros que no vienen de esa migración.
 app.include_router(players_router, prefix="/api/players")
+app.include_router(challenges_router, prefix="/api")
 app.include_router(api_router, prefix="/api/v1")
 
 

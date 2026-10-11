@@ -1,0 +1,261 @@
+{
+  "_comentario": [
+    "Catálogo de retos que carga `python -m app.db.seed_challenges` (desde backend/).",
+    "Retos Wi-Fi: exportados tal cual de wispr_terminal_professional/challenge-engine.js (initialChallenges).",
+    "  OJO: su `flag` es solo una base; la respuesta real es por jugador (contraseña o BSSID dentro de SU .pcap),",
+    "  así que no se pueden resolver hasta migrar la generación por jugador (challenge_instances).",
+    "Retos con `template`: description/flag/hint/solution/technique/difficulty salen del ChallengeSpec de esa plantilla",
+    "  (rutas relativas a challenges/), y el archivo se genera con challenge_generator.py al sembrar."
+  ],
+  "challenges": [
+    {
+      "id": "deauth-recon-foundation",
+      "title": "Primeros Deauth",
+      "category": "Deauth / DoS",
+      "kind": "deauth",
+      "difficulty": "Foundation",
+      "points": 120,
+      "description": "Una captura corta registra tramas de desautenticación contra una red Wi-Fi.",
+      "objective": "Abre la captura con tshark/Wireshark, filtra las tramas de management y averigua qué AP está siendo atacado.",
+      "flag": "WISPR{deauth_target}",
+      "tools": [
+        "wireshark",
+        "tshark"
+      ],
+      "hints": [
+        "Las tramas deauth son management (subtipo 0x0c).",
+        "La víctima es el BSSID que recibe MÁS deauth."
+      ],
+      "files": [
+        {
+          "name": "deauth.pcap",
+          "type": "pcap",
+          "desc": "Captura con tramas deauthentication"
+        }
+      ]
+    },
+    {
+      "id": "wpa-handshake-foundation",
+      "title": "Handshake al Descubierto",
+      "category": "WPA/WPA2",
+      "kind": "wpa-handshake",
+      "difficulty": "Foundation",
+      "points": 120,
+      "description": "Capturaste el 4-way handshake de una red WPA2 con contraseña débil.",
+      "objective": "Abre la captura en Wireshark, confirma el handshake y recupera la contraseña del Wi-Fi.",
+      "flag": "WISPR{wpa_handshake}",
+      "tools": [
+        "wireshark",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "El handshake ya está en el .pcap; no hace falta estar cerca de la red.",
+        "aircrack-ng prueba el diccionario contra el MIC del handshake."
+      ],
+      "files": [
+        {
+          "name": "handshake.pcap",
+          "type": "pcap",
+          "desc": "Captura 802.11 con el 4-way handshake"
+        }
+      ]
+    },
+    {
+      "id": "wpa-handshake-medium",
+      "title": "Clave con Sal y Pimienta",
+      "category": "WPA/WPA2",
+      "kind": "wpa-handshake",
+      "difficulty": "Medium",
+      "points": 200,
+      "description": "El mismo ataque, pero la contraseña mezcla mayúsculas, dígitos y un símbolo.",
+      "objective": "Recupera la passphrase WPA2 a partir del handshake capturado.",
+      "flag": "WISPR{wpa_handshake_medium}",
+      "tools": [
+        "wireshark",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "El método es idéntico; cambia la complejidad de la clave.",
+        "La flag es exactamente WISPR{<KEY FOUND>}."
+      ],
+      "files": [
+        {
+          "name": "handshake.pcap",
+          "type": "pcap",
+          "desc": "Captura 802.11 con el 4-way handshake"
+        }
+      ]
+    },
+    {
+      "id": "pmkid-capture-medium",
+      "title": "PMKID en un Mensaje",
+      "category": "PMKID",
+      "kind": "pmkid",
+      "difficulty": "Medium",
+      "points": 200,
+      "description": "Un AP filtra su PMKID en el primer EAPOL, sin necesidad de clientes conectados.",
+      "objective": "Extrae el PMKID de la captura, conviértelo al formato de hashcat y recupera la contraseña WPA2.",
+      "flag": "WISPR{pmkid_capture}",
+      "tools": [
+        "wireshark",
+        "hcxtools",
+        "hashcat",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "El PMKID va en el mensaje M1 (RSN PMKID KDE).",
+        "hcxpcapngtool convierte el .pcap al formato 22000 de hashcat."
+      ],
+      "files": [
+        {
+          "name": "pmkid.pcap",
+          "type": "pcap",
+          "desc": "Captura con el PMKID (M1)"
+        }
+      ]
+    },
+    {
+      "id": "deauth-storm-medium",
+      "title": "Tormenta de Deauth",
+      "category": "Deauth / DoS",
+      "kind": "deauth",
+      "difficulty": "Medium",
+      "points": 200,
+      "description": "Una captura registra una ráfaga de desautenticaciones contra la red.",
+      "objective": "Analiza las tramas de management y atribuye el ataque: ¿qué AP es la víctima?",
+      "flag": "WISPR{deauth_target}",
+      "tools": [
+        "wireshark",
+        "tshark"
+      ],
+      "hints": [
+        "Las tramas deauth son management subtipo 0x0c.",
+        "La víctima es el BSSID que recibe MÁS deauth."
+      ],
+      "files": [
+        {
+          "name": "deauth.pcap",
+          "type": "pcap",
+          "desc": "Captura con la tormenta de deauth"
+        }
+      ]
+    },
+    {
+      "id": "wpa-handshake-hard",
+      "title": "Passphrase de Dos Palabras",
+      "category": "WPA/WPA2",
+      "kind": "wpa-handshake",
+      "difficulty": "Hard",
+      "points": 340,
+      "description": "La red une dos palabras con un número; el handshake está capturado.",
+      "objective": "Recupera la passphrase WPA2 desde el handshake con un diccionario más grande.",
+      "flag": "WISPR{wpa_handshake_hard}",
+      "tools": [
+        "wireshark",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "El método es el mismo; cambia el tamaño del diccionario.",
+        "La flag es WISPR{<KEY FOUND>}."
+      ],
+      "files": [
+        {
+          "name": "handshake.pcap",
+          "type": "pcap",
+          "desc": "Captura 802.11 con el 4-way handshake"
+        }
+      ]
+    },
+    {
+      "id": "pmkid-clientless-hard",
+      "title": "PMKID sin Clientes",
+      "category": "PMKID",
+      "kind": "pmkid",
+      "difficulty": "Hard",
+      "points": 340,
+      "description": "Obtuviste el PMKID de un AP vulnerable en un solo mensaje, sin clientes conectados.",
+      "objective": "Extrae el PMKID de la captura y recupera la contraseña WPA2 offline.",
+      "flag": "WISPR{pmkid_clientless}",
+      "tools": [
+        "wireshark",
+        "hcxtools",
+        "hashcat",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "El PMKID viaja en el primer EAPOL (M1), en el RSN PMKID KDE.",
+        "hcxpcapngtool convierte el .pcap al formato 22000 de hashcat."
+      ],
+      "files": [
+        {
+          "name": "pmkid.pcap",
+          "type": "pcap",
+          "desc": "Captura con el PMKID (M1)"
+        }
+      ]
+    },
+    {
+      "id": "wpa-handshake-expert",
+      "title": "Passphrase Robusta",
+      "category": "WPA/WPA2",
+      "kind": "wpa-handshake",
+      "difficulty": "Expert",
+      "points": 500,
+      "description": "La red usa una contraseña larga de dos palabras, año y símbolo.",
+      "objective": "Recupera una passphrase WPA2 robusta desde el handshake con un diccionario grande.",
+      "flag": "WISPR{wpa_handshake_expert}",
+      "tools": [
+        "wireshark",
+        "aircrack-ng"
+      ],
+      "hints": [
+        "Cuanto más larga la clave, más depende de un buen diccionario.",
+        "La flag es WISPR{<KEY FOUND>}."
+      ],
+      "files": [
+        {
+          "name": "handshake.pcap",
+          "type": "pcap",
+          "desc": "Captura 802.11 con el 4-way handshake"
+        }
+      ]
+    },
+    {
+      "id": "network-wep-01",
+      "title": "IV Repetido",
+      "template": "templates/network/template.json",
+      "category": "WEP",
+      "objective": "Encuentra los dos paquetes que reutilizan el IV, recupera el keystream con el texto conocido y descifra la flag.",
+      "tools": [
+        "wireshark",
+        "scapy",
+        "python3"
+      ],
+      "files": [
+        {
+          "name": "network-wep-01.pcap",
+          "type": "pcap",
+          "desc": "Captura 802.11 con tramas WEP"
+        }
+      ]
+    },
+    {
+      "id": "crypto-xor-01",
+      "title": "XOR de un Byte",
+      "template": "templates/crypto/template.json",
+      "category": "Criptografía",
+      "objective": "Prueba las 256 llaves posibles y encuentra la que produce texto legible.",
+      "tools": [
+        "python3",
+        "xxd"
+      ],
+      "files": [
+        {
+          "name": "crypto-xor-01.bin",
+          "type": "bin",
+          "desc": "Archivo cifrado interceptado"
+        }
+      ]
+    }
+  ]
+}

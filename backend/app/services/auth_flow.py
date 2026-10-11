@@ -100,16 +100,15 @@ def is_admin_player(user: User) -> bool:
     return user.role == "admin"
 
 
-def public_player(user: User) -> dict:
+def public_player(user: User, db: DbSession | None = None) -> dict:
     """
     Forma pública de un usuario, igual a `publicPlayer()` en el prototipo.
 
-    `solved`/`attempts`/`submissions`/`lessonProgress` quedan vacíos a
-    propósito: esa parte (retos y progreso) todavía no existe en este
-    backend — se devuelven como estructuras vacías para no romper al
-    frontend, que ya espera esas llaves en la respuesta.
+    Con `db`, incluye el progreso real (retos resueltos, intentos, envíos y
+    lecciones); sin `db`, esas llaves van vacías — el frontend espera que
+    existan siempre.
     """
-    return {
+    player = {
         "playerId": str(user.id),
         "name": user.full_name,
         "handle": user.username,
@@ -123,6 +122,14 @@ def public_player(user: User) -> dict:
         "lessonProgress": {},
         "mustChangePassword": bool(user.must_change_password),
     }
+    if db is not None:
+        # Import local: estos servicios no dependen de auth_flow, pero así se
+        # evita cargarlos en cada import de este módulo.
+        from app.services import lessons, scoring
+
+        player.update(scoring.player_progress(db, user.id))
+        player["lessonProgress"] = lessons.lesson_progress(db, user.id)
+    return player
 
 
 def discard_pending_registration(token: str) -> None:
@@ -261,7 +268,7 @@ def complete_registration(token: str, code: str, db: DbSession) -> dict:
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"ok": True, "player": public_player(user)}
+    return {"ok": True, "player": public_player(user, db)}
 
 
 def resend_verification_code(token: str) -> dict:
@@ -318,7 +325,7 @@ def begin_login(data: dict, db: DbSession) -> dict:
     clear_failed_logins(user, db)
 
     if is_admin_player(user):
-        return {"ok": True, "admin": True, "player": public_player(user)}
+        return {"ok": True, "admin": True, "player": public_player(user, db)}
 
     if not user.email or not user.role:
         return {"ok": False, "error": "Esta cuenta no tiene un correo institucional verificado. Contacta al administrador del rango."}
@@ -357,7 +364,7 @@ def complete_login(token: str, code: str, db: DbSession) -> dict:
     user = db.get(User, pending.user_id)
     if user is None:
         return {"ok": False, "error": "Esta cuenta ya no existe."}
-    return {"ok": True, "player": public_player(user)}
+    return {"ok": True, "player": public_player(user, db)}
 
 
 def resend_login_code(token: str, db: DbSession) -> dict:

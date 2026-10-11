@@ -161,8 +161,8 @@ async def login_resend(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def me(current_player: User = Depends(get_current_player)):
-    return {"ok": True, "player": auth_flow.public_player(current_player)}
+def me(current_player: User = Depends(get_current_player), db: Session = Depends(get_db)):
+    return {"ok": True, "player": auth_flow.public_player(current_player, db)}
 
 
 @router.post("/logout")

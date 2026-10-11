@@ -215,13 +215,17 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
 Un solo worker sobra para EXPOTEC y para un aula. Si algún día hace falta más de uno, primero hay
 que mover los códigos pendientes a una tabla en la BD.
 
-### 🔴 3. Migraciones
+### 🔴 3. Migraciones y catálogo de retos
 
 Después de configurar el `.env`, desde `backend/`:
 
 ```bash
 alembic -c migrations/alembic.ini upgrade head
+python -m app.db.seed_challenges   # carga el catálogo de retos y genera sus archivos
 ```
+
+El seed se puede correr las veces que haga falta (actualiza, no duplica). Hay que volver a
+correrlo si cambia `challenges/catalog/catalog.json`.
 
 ### 🟡 4. `ENVIRONMENT=production` en el `.env`
 
