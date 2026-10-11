@@ -163,7 +163,7 @@ def generate_xor_challenge(spec: ChallengeSpec) -> Path:
     Genera un archivo binario con la flag cifrada por XOR contra un solo
     byte aleatorio. El estudiante prueba las 256 llaves posibles (0-255) y
     se queda con la que produce un resultado legible (empieza con
-    "FLAG{"), sin necesidad de conocer la llave de antemano:
+    "WISPR{"), sin necesidad de conocer la llave de antemano:
 
         para cada llave en 0..255:
             texto = bytes(b ^ llave for b in ciphertext)

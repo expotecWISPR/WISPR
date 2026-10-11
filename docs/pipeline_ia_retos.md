@@ -93,7 +93,7 @@ Formato acordado (basado en el ejemplo de trabajo del equipo):
   "category": "network",
   "description": "Red WEP antigua con reutilización de IVs capturada.",
   "technique": "iv_reuse_wep",
-  "flag": "FLAG{wep_died_for_a_reason}",
+  "flag": "WISPR{wep_died_for_a_reason}",
   "hint": "Busca IVs repetidos en el pcap.",
   "solution": "Extraer IVs duplicados, recuperar keystream, XOR contra ciphertext, decodificar flag embebida en el payload ARP."
 }

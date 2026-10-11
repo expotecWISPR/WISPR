@@ -4,7 +4,7 @@
   "category": "network",
   "description": "Un punto de acceso antiguo en la red de la empresa todavía usa WEP. El equipo de auditoría capturó tráfico y sospecha que el router reutiliza el mismo IV en varios paquetes. Analizá el archivo .pcap y recuperá la flag oculta.",
   "technique": "iv_reuse_wep",
-  "flag": "FLAG{wep_died_for_a_reason}",
+  "flag": "WISPR{wep_died_for_a_reason}",
   "hint": "Busca dos paquetes 802.11 con el mismo IV en la cabecera WEP. Si el IV se repite, el keystream de RC4 también se repite entre esos dos paquetes.",
   "solution": "1) Extraer el IV y el 'wepdata' (payload cifrado) de cada paquete del pcap con Scapy. 2) Encontrar dos paquetes con IV idéntico. 3) El primer paquete es un ARP request estándar: su plaintext es la cabecera LLC/SNAP fija para ARP (AA AA 03 00 00 00 08 06) seguida de los campos ARP conocidos (documentados en la descripción del reto), rellenado con ceros. 4) keystream = ciphertext_1 XOR plaintext_1_conocido. 5) plaintext_2 = ciphertext_2 XOR keystream. 6) Los bytes de plaintext_2 después de la cabecera LLC/SNAP son la flag en texto plano."
 }

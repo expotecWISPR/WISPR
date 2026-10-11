@@ -55,7 +55,7 @@ _SYSTEM_PROMPT = (
     f'  "technique": OBLIGATORIAMENTE uno de {list(_TECHNIQUES)} — nunca '
     "inventes un valor fuera de esta lista, aunque se te ocurra una técnica "
     "más interesante o más avanzada\n"
-    '  "flag": string con formato exacto FLAG{contenido_en_snake_case}\n'
+    '  "flag": string con formato exacto WISPR{contenido_en_snake_case}\n'
     '  "hint": pista visible para el estudiante si se traba\n'
     '  "solution": explicación de la solución, para material del docente\n'
 )

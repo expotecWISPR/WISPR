@@ -32,7 +32,7 @@ def _make_spec(**overrides) -> ChallengeSpec:
         "category": "network",
         "description": "Reto de prueba.",
         "technique": "iv_reuse_wep",
-        "flag": "FLAG{test_flag_generica}",
+        "flag": "WISPR{test_flag_generica}",
         "hint": "pista",
         "solution": "solucion",
     }
@@ -63,7 +63,7 @@ class TestGenerateWepReusedIvPcap(_LimpiaArchivosGenerados):
         (cabecera SNAP + ARP estándar) recupera la flag sin conocer la
         llave WEP.
         """
-        spec = _make_spec(id="test-wep-iv-reuse", technique="iv_reuse_wep", flag="FLAG{prueba_wep_iv}")
+        spec = _make_spec(id="test-wep-iv-reuse", technique="iv_reuse_wep", flag="WISPR{prueba_wep_iv}")
         path = self._track(generate_wep_reused_iv_pcap(spec))
 
         self.assertTrue(path.exists())
@@ -88,8 +88,8 @@ class TestGenerateWepReusedIvPcap(_LimpiaArchivosGenerados):
         instancias del mismo reto compartieran llave, resolver una
         filtraría la otra.
         """
-        spec_a = _make_spec(id="test-wep-a", flag="FLAG{reto_a}")
-        spec_b = _make_spec(id="test-wep-b", flag="FLAG{reto_b}")
+        spec_a = _make_spec(id="test-wep-a", flag="WISPR{reto_a}")
+        spec_b = _make_spec(id="test-wep-b", flag="WISPR{reto_b}")
         path_a = self._track(generate_wep_reused_iv_pcap(spec_a))
         path_b = self._track(generate_wep_reused_iv_pcap(spec_b))
 
@@ -110,7 +110,7 @@ class TestGenerateXorChallenge(_LimpiaArchivosGenerados):
             id="test-xor-bruteforce",
             category="crypto",
             technique="xor_singlebyte",
-            flag="FLAG{prueba_xor_bruteforce}",
+            flag="WISPR{prueba_xor_bruteforce}",
         )
         path = self._track(generate_xor_challenge(spec))
         self.assertTrue(path.exists())
@@ -123,15 +123,15 @@ class TestGenerateXorChallenge(_LimpiaArchivosGenerados):
                 text = candidate.decode("utf-8")
             except UnicodeDecodeError:
                 continue
-            if text.startswith("FLAG{") and text.endswith("}"):
+            if text.startswith("WISPR{") and text.endswith("}"):
                 recovered = text
                 break
 
         self.assertEqual(recovered, spec.flag)
 
     def test_dos_llamadas_generan_llaves_distintas(self):
-        spec_a = _make_spec(id="test-xor-a", category="crypto", technique="xor_singlebyte", flag="FLAG{reto_a}")
-        spec_b = _make_spec(id="test-xor-b", category="crypto", technique="xor_singlebyte", flag="FLAG{reto_a}")
+        spec_a = _make_spec(id="test-xor-a", category="crypto", technique="xor_singlebyte", flag="WISPR{reto_a}")
+        spec_b = _make_spec(id="test-xor-b", category="crypto", technique="xor_singlebyte", flag="WISPR{reto_a}")
         path_a = self._track(generate_xor_challenge(spec_a))
         path_b = self._track(generate_xor_challenge(spec_b))
         # Misma flag en ambos specs, pero llaves distintas -> ciphertexts

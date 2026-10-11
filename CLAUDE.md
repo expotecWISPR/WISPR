@@ -433,7 +433,7 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   Persona 2 — fusión el 7 oct)** — las 4 piezas de esa línea del reparto están hechas:
   - `app/schemas/challenge.py`: `ChallengeSpec` de Pydantic, con `Literal` para
     category/difficulty/technique (el registro fijo) y validación de formato de flag
-    (`FLAG{...}`).
+    (`WISPR{...}`).
   - `app/services/challenge_generator.py`: `TECHNIQUE_REGISTRY` con **ambas** técnicas del MVP
     implementadas — `generate_wep_reused_iv_pcap` (genera un `.pcap` real con Scapy, RC4 propio,
     IV reutilizado) y `generate_xor_challenge` (XOR de un solo byte). Las dos se probaron

@@ -19,11 +19,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-# Formato esperado de toda flag de la plataforma: FLAG{contenido}.
+# Formato esperado de toda flag de la plataforma: WISPR{contenido}.
+# Mismo regex que el prototipo (`wispr_terminal_professional`, verifySubmission):
+# 3-180 caracteres, sin llaves ni saltos de línea adentro. Unificado el 11 oct
+# (antes era FLAG{...}) porque el frontend, los retos Wi-Fi del prototipo y el
+# comando `ctf submit` de la terminal Kali ya usan WISPR{...}.
 # Se valida acá (y no solo "a ojo" en el prompt) porque la IA genera texto,
 # no garantías — este regex es la última línea de defensa antes de guardar
 # la flag en Supabase.
-FLAG_PATTERN = re.compile(r"^FLAG\{[^{}]+\}$")
+FLAG_PATTERN = re.compile(r"^WISPR\{[^{}\r\n]{3,180}\}$")
 
 
 class ChallengeSpec(BaseModel):
@@ -38,7 +42,7 @@ class ChallengeSpec(BaseModel):
           "category": "network",
           "description": "Red WEP antigua con reutilización de IVs capturada.",
           "technique": "iv_reuse_wep",
-          "flag": "FLAG{wep_died_for_a_reason}",
+          "flag": "WISPR{wep_died_for_a_reason}",
           "hint": "Busca IVs repetidos en el pcap.",
           "solution": "Extraer IVs duplicados, recuperar keystream, XOR..."
         }
@@ -72,6 +76,6 @@ class ChallengeSpec(BaseModel):
     def flag_debe_tener_formato_valido(cls, value: str) -> str:
         if not FLAG_PATTERN.match(value):
             raise ValueError(
-                f"La flag '{value}' no tiene el formato esperado FLAG{{...}}."
+                f"La flag '{value}' no tiene el formato esperado WISPR{{...}}."
             )
         return value

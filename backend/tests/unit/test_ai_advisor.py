@@ -109,7 +109,7 @@ class TestGenerateChallengeSpecRaw(unittest.TestCase):
             "category": "network",
             "description": "Red WEP vulnerable",
             "technique": "iv_reuse_wep",
-            "flag": "FLAG{simulado_por_test}",
+            "flag": "WISPR{simulado_por_test}",
             "hint": "IVs repetidos",
             "solution": "XOR contra plaintext conocido"
         }"""
@@ -121,7 +121,7 @@ class TestGenerateChallengeSpecRaw(unittest.TestCase):
         # El punto clave: lo que devuelve esta función debe poder pasar
         # directo a ChallengeSpec sin transformación adicional.
         spec = ChallengeSpec(**raw)
-        self.assertEqual(spec.flag, "FLAG{simulado_por_test}")
+        self.assertEqual(spec.flag, "WISPR{simulado_por_test}")
 
     @patch("app.services.ai_advisor.Together")
     def test_tolera_respuesta_envuelta_en_markdown(self, mock_together_cls):
@@ -132,7 +132,7 @@ class TestGenerateChallengeSpecRaw(unittest.TestCase):
             "category": "crypto",
             "description": "desc",
             "technique": "xor_singlebyte",
-            "flag": "FLAG{con_markdown}",
+            "flag": "WISPR{con_markdown}",
             "hint": "hint",
             "solution": "sol"
         }
@@ -141,7 +141,7 @@ class TestGenerateChallengeSpecRaw(unittest.TestCase):
 
         raw = generate_challenge_spec_raw("crypto", "easy")
         spec = ChallengeSpec(**raw)
-        self.assertEqual(spec.flag, "FLAG{con_markdown}")
+        self.assertEqual(spec.flag, "WISPR{con_markdown}")
 
 
 if __name__ == "__main__":

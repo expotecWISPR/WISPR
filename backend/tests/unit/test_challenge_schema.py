@@ -19,7 +19,7 @@ VALID_SPEC_KWARGS = {
     "category": "network",
     "description": "Red WEP antigua con reutilización de IVs capturada.",
     "technique": "iv_reuse_wep",
-    "flag": "FLAG{wep_died_for_a_reason}",
+    "flag": "WISPR{wep_died_for_a_reason}",
     "hint": "Busca IVs repetidos en el pcap.",
     "solution": "Extraer IVs duplicados, recuperar keystream, XOR contra ciphertext.",
 }
@@ -65,7 +65,7 @@ class TestChallengeSpecRechazaFlagInvalida(unittest.TestCase):
             ChallengeSpec(**kwargs)
 
     def test_rechaza_flag_vacia_entre_llaves(self):
-        kwargs = {**VALID_SPEC_KWARGS, "flag": "FLAG{}"}
+        kwargs = {**VALID_SPEC_KWARGS, "flag": "WISPR{}"}
         with self.assertRaises(ValidationError):
             ChallengeSpec(**kwargs)
 

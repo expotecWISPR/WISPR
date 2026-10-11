@@ -97,7 +97,7 @@ Archivos trabajados (en este orden):
 
 1. ✅ `backend/app/schemas/challenge.py` — `ChallengeSpec` de Pydantic (id, difficulty, category,
    description, technique, flag, hint, solution), con `Literal` para el registro fijo y
-   validación de formato de flag (`FLAG{...}`).
+   validación de formato de flag (`WISPR{...}`).
 2. ✅ `backend/app/services/challenge_generator.py` — `TECHNIQUE_REGISTRY` con **las dos**
    técnicas del MVP: `iv_reuse_wep` (pcap real con Scapy, RC4 propio, IV reutilizado, flag en
    el payload) y `xor_singlebyte` (XOR de un solo byte). Las dos probadas simulando el ataque
