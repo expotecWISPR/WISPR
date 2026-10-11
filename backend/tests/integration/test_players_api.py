@@ -52,6 +52,16 @@ def setup_function(_fn):
     auth_flow._pending_logins.clear()
 
 
+def _pending_code(store: dict, token: str) -> str:
+    """Lee el código directo del almacén en memoria del backend.
+
+    Así la prueba funciona igual con SMTP real configurado en `.env` (el
+    correo se envía de verdad y la respuesta no trae `devCode`) que sin él
+    (modo desarrollo).
+    """
+    return store[token].code
+
+
 def test_flujo_completo_registro_verificacion_me_logout():
     register_response = client.post(
         "/api/players/register",
@@ -60,8 +70,7 @@ def test_flujo_completo_registro_verificacion_me_logout():
     assert register_response.status_code == 200
     body = register_response.json()
     assert body["ok"] is True
-    assert body["dev"] is True  # sin SMTP_HOST configurado, cae a modo desarrollo
-    code = body["devCode"]
+    code = _pending_code(auth_flow._pending_registrations, body["token"])
 
     verify_response = client.post("/api/players/verify", json={"token": body["token"], "code": code})
     assert verify_response.status_code == 200
@@ -97,14 +106,14 @@ def test_login_con_mfa_de_punta_a_punta():
         "/api/players/register",
         json={"name": "Beto", "handle": "beto", "gender": "masculino", "password": "clave1234", "email": "beto@est.cedesdonbosco.ed.cr"},
     )
-    client.post("/api/players/verify", json={"token": register.json()["token"], "code": register.json()["devCode"]})
+    client.post("/api/players/verify", json={"token": register.json()["token"], "code": _pending_code(auth_flow._pending_registrations, register.json()["token"])})
 
     login = client.post("/api/players/login", json={"handle": "beto", "password": "clave1234"})
     assert login.status_code == 200
     login_body = login.json()
     assert login_body["pending"] is True
 
-    login_verify = client.post("/api/players/login-verify", json={"token": login_body["token"], "code": login_body["devCode"]})
+    login_verify = client.post("/api/players/login-verify", json={"token": login_body["token"], "code": _pending_code(auth_flow._pending_logins, login_body["token"])})
     assert login_verify.status_code == 200
     assert login_verify.json()["ok"] is True
     assert "sessionToken" in login_verify.json()

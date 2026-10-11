@@ -280,9 +280,10 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   La IA nunca inventa mecanismos nuevos ni genera archivos/binarios directamente. Detalle
   completo en `docs/pipeline_ia_retos.md`. Alcance del MVP: solo 1-2 categorías (crypto y
   network) tienen el pipeline completo; el resto usa retos estáticos.
-* **Equipo de backend ahora son 2 personas (26 ago).** El trabajo se dividió por archivos para
-  evitar colisiones de Git — ver `.claude/memory/reparto_tareas.md` **antes de tocar código**
-  si hay más de una persona trabajando en el backend el mismo día.
+* **Equipo de backend: 2 personas (26 ago) — el reparto por archivos ya no aplica (11 oct).**
+  La Persona 1 (dueña de este repo) lleva todo el backend; la Persona 2 ahora trabaja en AWS
+  (desplegar el proyecto en la nube). `.claude/memory/reparto_tareas.md` queda solo como
+  registro histórico de cómo se dividió el trabajo entre el 26 ago y el 7 oct.
 * **Fusión de `feature/retos-ia-persona2` a `main` (7 oct).** El pipeline de generación de
   retos con IA diseñado en `docs/pipeline_ia_retos.md` ya es código real en `main`: `ChallengeSpec`,
   `TECHNIQUE_REGISTRY` (`iv_reuse_wep`, `xor_singlebyte`), `ai_advisor.py`, las plantillas de
@@ -295,8 +296,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   nadie commitea directo a `main`, cada persona trabaja en su rama `feature/<algo>` y junta con
   Pull Request. No se cumplió entre el 26 ago y el 7 oct por esto mismo — vale la pena
   re-confirmarla con el equipo ahora que ya está visible para ambos en `main`.
-* Versión de Python para el venv del backend: usar **Python 3.12**, no la más nueva instalada
-  en la máquina (ej. 3.14) — ver nota de `psycopg2-binary` en "Progreso técnico" más abajo.
+* Versión de Python para el venv del backend: **3.12, 3.13 o 3.14** sirven. La restricción
+  anterior ("solo 3.12") era porque `psycopg2-binary` no tenía instalador precompilado para
+  Windows en 3.14. **Verificado el 11 oct:** `psycopg2-binary==2.9.12` (el de
+  `requirements.txt`) ya publica wheels `win_amd64` para cp312, cp313 y cp314, así que en
+  Windows se instala sin compilar nada ni tener PostgreSQL local.
 * **Auth con MFA migrado de `wispr_terminal_professional` a FastAPI (7 oct).** Ese proyecto
   (carpeta aparte, `/home/lonsoo/wispr_terminal_professional`, no es un repo Git) tenía un
   backend Node real y ya probado con correo real: registro/login con código de 6 dígitos,
@@ -325,11 +329,9 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   - 59 tests (35 nuevos de esta migración) pasan contra una base SQLite en memoria — no se pudo
     probar contra Supabase real porque estaba pausado. **Pendiente real: aplicar la migración
     de Alembic y probar el flujo completo con Supabase reactivado antes de dar esto por cerrado.**
-  - ⚠️ **Hallazgo de seguridad, sin resolver todavía:** `wispr_terminal_professional/.env.example`
-    tiene una contraseña de aplicación de Gmail real en texto plano (no es un repo Git, así que
-    no se subió a ningún lado, pero ese archivo es justo el que se comparte por convención).
-    Recomendado: rotarla en myaccount.google.com/apppasswords y dejar el `.env.example` con un
-    placeholder.
+  - ~~Hallazgo de seguridad: contraseña de Gmail en `wispr_terminal_professional/.env.example`~~
+    **Cerrado (11 oct):** confirmado con la compañera que es una contraseña falsa/vieja que ya
+    no se usa.
 * **Autenticación con verificación de correo (MFA) + perfil de usuario ampliado (nuevo, 13 sep).**
   Decisión de equipo: el registro **y** el login exigen un código de verificación de 6 dígitos
   enviado al correo (doble capa: contraseña + posesión del correo). Se decidió MFA en ambos
@@ -363,8 +365,7 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 ## Progreso técnico
 
 * Repositorio Git inicializado, con historial de commits.
-* `backend/venv/` creado (usar **Python 3.12**, no la versión más nueva instalada en la
-  máquina — ver nota arriba); dependencias instaladas y fijadas en `backend/requirements.txt`
+* `backend/venv/` creado (Python 3.12–3.14, ver nota arriba); dependencias instaladas y fijadas en `backend/requirements.txt`
   (fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic-settings, email-validator,
   psycopg2-binary, python-jose, bcrypt, python-multipart, together, boto3, scapy).
 * `backend/.env` configurado con `DATABASE_URL` de Supabase — **conexión verificada**
@@ -463,10 +464,8 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 6. ~~Migración de auth con MFA por correo + perfil ampliado~~ ✅ Hecho, migración aplicada y
    **verificado contra Supabase real, con correo real** (7-8 oct) — ver "Progreso técnico".
    Queda:
-   a) Rotar la contraseña de aplicación de Gmail expuesta en
-      `wispr_terminal_professional/.env.example` (hallazgo de seguridad, ver arriba) — sigue
-      sin resolver. La que quedó copiada en `backend/.env` es la correcta (la de
-      `wispr_terminal_professional/.env`, `wispr.info@gmail.com`), no la filtrada.
+   a) ~~Rotar la contraseña de Gmail de `wispr_terminal_professional/.env.example`~~ Cerrado
+      (11 oct): era falsa y ya no se usa. La de `backend/.env` (`wispr.info@gmail.com`) es la real.
    b) ~~Apuntar el frontend a este backend y confirmar que el flujo real funciona con la UI~~
       ✅ Hecho (7 oct, con Playwright — ver "Progreso técnico"). Falta que el equipo decida
       **dónde vive de forma permanente** esa URL del backend (hoy el `<meta name="wispr-api">`

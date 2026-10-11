@@ -5,6 +5,10 @@ metadata:
   type: project
 ---
 
+> **⚠️ Ya no aplica (11 oct 2026):** el reparto por archivos terminó. La Persona 1 lleva todo el
+> backend y la Persona 2 trabaja en AWS. Este archivo queda como registro histórico; la nota de
+> Supabase pausado de abajo sigue siendo útil.
+
 **Última actualización:** 7 de octubre de 2026 (fusión de `feature/retos-ia-persona2` a `main`).
 
 **Nota recurrente — Supabase se pausa solo:** el proyecto está en el plan gratuito de Supabase,

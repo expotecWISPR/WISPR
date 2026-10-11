@@ -8,9 +8,10 @@ metadata:
 ---
 
 El usuario es estudiante de undécimo año de Ciberseguridad del CTP Don Bosco.
-Su rol en el proyecto WISPR es **ingeniero de backend**. Desde que el backend se dividió entre
-dos personas (26 ago 2026), este usuario es específicamente **Persona 2 — generación de retos
-con IA** (ver `.claude/memory/reparto_tareas.md`), no la línea de Usuarios/Autenticación.
+Su rol en el proyecto WISPR es **ingeniero de backend**, y es la **Persona 1** (dueña del repo y
+de la cuenta de Supabase). Desde el 11 oct 2026 el reparto por archivos ya no existe: este
+usuario lleva todo el backend, y la Persona 2 trabaja en AWS (desplegar el proyecto).
+Le parece bien que los tests de integración manden correos reales cuando hay SMTP en `.env`.
 
 Es principiante en desarrollo de software. No tiene experiencia sólida en muchas
 de las tecnologías del stack (FastAPI, SQLAlchemy, Docker, etc.).

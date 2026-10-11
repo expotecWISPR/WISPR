@@ -39,10 +39,10 @@ Decisiones clave a recordar:
   `ai_advisor.py`, templates, 25 tests) ya es código real en `main`, no solo diseño. Decisión
   del mismo día: el fine-tuning con LoRA queda en pausa (se está resolviendo por separado) y
   mientras tanto `ai_advisor.py` usa el modelo base de Together AI por **prompting simple**.
-* El venv del backend debe crearse con **Python 3.12**, no la versión más nueva instalada en la
-  máquina (ej. 3.14) — `psycopg2-binary` no tenía wheel para 3.14 en Windows al 26 ago 2026 y
-  falla al compilar desde código fuente sin PostgreSQL local instalado. Sigue sin confirmarse si
-  `psycopg2-binary==2.9.12` (ya en `requirements.txt`) resuelve esto en una instalación real.
+* Python del venv: 3.12, 3.13 o 3.14. Verificado el 11 oct que `psycopg2-binary==2.9.12` (el
+  de `requirements.txt`) tiene wheels `win_amd64` para las tres — importa porque la mayoría del
+  equipo/usuarios usa Windows. Si se sube la versión de psycopg2 o de Python, volver a verificar
+  con `pip download --only-binary=:all: --platform win_amd64 --python-version 3XX`.
 * Política de equipo (26 ago): nadie commitea directo a `main`, cada persona trabaja en su
   rama `feature/<algo>` y junta con Pull Request. En la práctica esto no se cumplió entre el 26
   ago y el 7 oct porque esta regla vivía solo en la rama sin fusionar — Persona 1 siguió
