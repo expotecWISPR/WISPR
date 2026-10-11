@@ -252,5 +252,6 @@ real del frontend.
 - **Archivos de retos generados:** se guardan en `challenges/generated/` local — válido con una sola
   instancia. Pasar a S3 es un paso posterior (punto 9 del plan en `CLAUDE.md`).
 - **Node.js:** el backend no lo necesita. Solo lo usan el frontend prototipo y la terminal Kali.
+  Los archivos de los retos Wi-Fi (`challenges/static/`) ya vienen generados en el repositorio.
 - **Supabase pausado:** si la base de datos da `could not translate host name`, reactivar el
   proyecto en supabase.com antes de asumir que algo del servidor está mal.

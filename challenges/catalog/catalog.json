@@ -2,8 +2,8 @@
   "_comentario": [
     "Catálogo de retos que carga `python -m app.db.seed_challenges` (desde backend/).",
     "Retos Wi-Fi: exportados tal cual de wispr_terminal_professional/challenge-engine.js (initialChallenges).",
-    "  OJO: su `flag` es solo una base; la respuesta real es por jugador (contraseña o BSSID dentro de SU .pcap),",
-    "  así que no se pueden resolver hasta migrar la generación por jugador (challenge_instances).",
+    "  Su `flag` y `files` los escribe challenges/static/generar_wifi.js: archivos FIJOS (iguales para todos los",
+    "  jugadores) en challenges/static/<id>/. No editar esas flags a mano: tests/unit/test_wifi_static.py lo detecta.",
     "Retos con `template`: description/flag/hint/solution/technique/difficulty salen del ChallengeSpec de esa plantilla",
     "  (rutas relativas a challenges/), y el archivo se genera con challenge_generator.py al sembrar."
   ],
@@ -17,7 +17,7 @@
       "points": 120,
       "description": "Una captura corta registra tramas de desautenticación contra una red Wi-Fi.",
       "objective": "Abre la captura con tshark/Wireshark, filtra las tramas de management y averigua qué AP está siendo atacado.",
-      "flag": "WISPR{deauth_target}",
+      "flag": "WISPR{deauth_027472e4b51c}",
       "tools": [
         "wireshark",
         "tshark"
@@ -43,7 +43,7 @@
       "points": 120,
       "description": "Capturaste el 4-way handshake de una red WPA2 con contraseña débil.",
       "objective": "Abre la captura en Wireshark, confirma el handshake y recupera la contraseña del Wi-Fi.",
-      "flag": "WISPR{wpa_handshake}",
+      "flag": "WISPR{cafe2021}",
       "tools": [
         "wireshark",
         "aircrack-ng"
@@ -57,6 +57,11 @@
           "name": "handshake.pcap",
           "type": "pcap",
           "desc": "Captura 802.11 con el 4-way handshake"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos para el ataque"
         }
       ]
     },
@@ -69,7 +74,7 @@
       "points": 200,
       "description": "El mismo ataque, pero la contraseña mezcla mayúsculas, dígitos y un símbolo.",
       "objective": "Recupera la passphrase WPA2 a partir del handshake capturado.",
-      "flag": "WISPR{wpa_handshake_medium}",
+      "flag": "WISPR{Cedro711@}",
       "tools": [
         "wireshark",
         "aircrack-ng"
@@ -83,6 +88,11 @@
           "name": "handshake.pcap",
           "type": "pcap",
           "desc": "Captura 802.11 con el 4-way handshake"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos para el ataque"
         }
       ]
     },
@@ -95,7 +105,7 @@
       "points": 200,
       "description": "Un AP filtra su PMKID en el primer EAPOL, sin necesidad de clientes conectados.",
       "objective": "Extrae el PMKID de la captura, conviértelo al formato de hashcat y recupera la contraseña WPA2.",
-      "flag": "WISPR{pmkid_capture}",
+      "flag": "WISPR{Arena144%}",
       "tools": [
         "wireshark",
         "hcxtools",
@@ -111,6 +121,11 @@
           "name": "pmkid.pcap",
           "type": "pcap",
           "desc": "Captura con el PMKID (M1)"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos"
         }
       ]
     },
@@ -123,7 +138,7 @@
       "points": 200,
       "description": "Una captura registra una ráfaga de desautenticaciones contra la red.",
       "objective": "Analiza las tramas de management y atribuye el ataque: ¿qué AP es la víctima?",
-      "flag": "WISPR{deauth_target}",
+      "flag": "WISPR{deauth_02dcbe98be9c}",
       "tools": [
         "wireshark",
         "tshark"
@@ -149,7 +164,7 @@
       "points": 340,
       "description": "La red une dos palabras con un número; el handshake está capturado.",
       "objective": "Recupera la passphrase WPA2 desde el handshake con un diccionario más grande.",
-      "flag": "WISPR{wpa_handshake_hard}",
+      "flag": "WISPR{zorro_cereza36}",
       "tools": [
         "wireshark",
         "aircrack-ng"
@@ -163,6 +178,11 @@
           "name": "handshake.pcap",
           "type": "pcap",
           "desc": "Captura 802.11 con el 4-way handshake"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos para el ataque"
         }
       ]
     },
@@ -175,7 +195,7 @@
       "points": 340,
       "description": "Obtuviste el PMKID de un AP vulnerable en un solo mensaje, sin clientes conectados.",
       "objective": "Extrae el PMKID de la captura y recupera la contraseña WPA2 offline.",
-      "flag": "WISPR{pmkid_clientless}",
+      "flag": "WISPR{verde_montana80}",
       "tools": [
         "wireshark",
         "hcxtools",
@@ -191,6 +211,11 @@
           "name": "pmkid.pcap",
           "type": "pcap",
           "desc": "Captura con el PMKID (M1)"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos"
         }
       ]
     },
@@ -203,7 +228,7 @@
       "points": 500,
       "description": "La red usa una contraseña larga de dos palabras, año y símbolo.",
       "objective": "Recupera una passphrase WPA2 robusta desde el handshake con un diccionario grande.",
-      "flag": "WISPR{wpa_handshake_expert}",
+      "flag": "WISPR{NubesFutbol2020*}",
       "tools": [
         "wireshark",
         "aircrack-ng"
@@ -217,6 +242,11 @@
           "name": "handshake.pcap",
           "type": "pcap",
           "desc": "Captura 802.11 con el 4-way handshake"
+        },
+        {
+          "name": "wordlist.txt",
+          "type": "wordlist",
+          "desc": "Diccionario de candidatos para el ataque"
         }
       ]
     },

@@ -71,7 +71,8 @@ def download_file(
     path = challenges.artifact_path(challenge, file_name) if challenge else None
     if path is None:
         return JSONResponse(status_code=404, content={"ok": False, "error": "Archivo no encontrado."})
-    media_type = "application/vnd.tcpdump.pcap" if path.suffix == ".pcap" else "application/octet-stream"
+    media_type = {".pcap": "application/vnd.tcpdump.pcap", ".txt": "text/plain; charset=utf-8"}.get(
+        path.suffix, "application/octet-stream")
     return FileResponse(path, media_type=media_type, filename=path.name, headers={"Cache-Control": "no-store"})
 
 

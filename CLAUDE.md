@@ -467,7 +467,7 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     con el contrato exacto del frontend. El `playerId` que manda el frontend se ignora: el
     jugador sale siempre de la sesión. `/api/players/me` ya devuelve el progreso real.
   - Catálogo en `challenges/catalog/catalog.json`: los 8 retos Wi-Fi exportados tal cual del
-    prototipo + WEP y XOR del pipeline. Se carga con `python -m app.db.seed_challenges`
+    prototipo (con archivos fijos en `challenges/static/`, ver punto 7b) + WEP y XOR del pipeline. Se carga con `python -m app.db.seed_challenges`
     (idempotente; ya cargado en Supabase).
   - Sin terminal Kali todavía: `/challenges/active` no arranca contenedores y
     `/platform/status` informa Docker no disponible. `nextChallenge` siempre `None`.
@@ -497,14 +497,28 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
       si ese frontend termina sirviéndose junto al backend en la misma instancia EC2 o separado).
 7. ~~Retos, envíos de flags, ranking y progreso de lecciones~~ ✅ Hecho y **verificado contra
    Supabase real** (11 oct) — ver "Progreso técnico". Rama `feature/retos-envios-ranking`.
-7b. **(Siguiente) Generación de archivos por jugador** (`challenge_instances`), empezando por
-   **deauth** (más simple: la flag es `WISPR{deauth_<bssid>}`, sin criptografía), luego PMKID y al
-   final WPA handshake. Migrar de `wispr_terminal_professional/pcap-wifi.js` +
-   `pcap-challenges.js` (~440 líneas; la mitad de texto de `challenge-instances.js` NO hace falta).
-   Hasta esto, los **8 retos Wi-Fi aparecen pero no se pueden resolver**: su flag real es por
-   jugador. Node v22 ya está instalado en esta máquina para comparar el `.pcap` de Node vs el de
-   Python. Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`.
-   Terminal Kali, S3 + IAM y la instancia EC2 siguen después, como estaba decidido.
+7b. ~~Retos Wi-Fi jugables~~ ✅ **Solución temporal hecha (11 oct):** los 8 retos Wi-Fi usan
+   archivos **fijos** (un `.pcap` + `wordlist.txt` por reto, iguales para todos los jugadores) en
+   `challenges/static/`, generados UNA vez con el generador del prototipo:
+   `node challenges/static/generar_wifi.js /ruta/a/wispr_terminal_professional` (determinista). El
+   backend **no necesita Node**: solo sirve esos archivos. `tests/unit/test_wifi_static.py` resuelve
+   los 8 con Python/Scapy (PBKDF2, MIC del handshake, PMKID — sin usar el código Node) y confirma que
+   dan la flag del catálogo. Los 10 retos ya se pueden descargar y ganar.
+7c. **(Futuro — solo si se justifica) Archivos por jugador en Python.** Límite real de la solución
+   temporal: como todos reciben el mismo archivo, **un estudiante puede pasarle la flag a otro**.
+   - **Cuándo SÍ hacerlo:** antes de usar WISPR para **evaluar** a un grupo real (nota, ranking de
+     aula), o si se muestra el ranking como algo competitivo entre muchos estudiantes. Ahí copiar
+     flags arruina la medición.
+   - **Cuándo NO hace falta:** la demo de EXPOTEC (4 personas, un dispositivo) y las defensas de
+     avance: la solución temporal alcanza y no conviene gastar tiempo ahí.
+   - **Por qué Python y no seguir con Node:** el backend es Python; generar en el momento con Node
+     obligaría a correr dos runtimes en el servidor y repartir la "flag correcta" entre dos
+     servicios. La criptografía ya está validada en Python (el test de arriba la usa para resolver);
+     falta la parte de *construir* las tramas, ~440 líneas de `pcap-wifi.js` + `pcap-challenges.js`.
+     Orden: deauth → PMKID → WPA. La tabla `challenge_instances` y `flag_validator.py` ya están
+     listos para esto; frontend y rutas no cambian.
+   Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`. Terminal Kali,
+   S3 + IAM y la instancia EC2 siguen después, como estaba decidido.
 8. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
    agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
    Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El

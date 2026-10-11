@@ -137,3 +137,19 @@ def test_progreso_de_lecciones_conserva_el_mejor_intento(client):
     assert bad.status_code == 400 and bad.json() == {"ok": False, "error": "Lección inválida."}
     assert client.post("/api/progress", headers=ana, json={"lessonId": "modulo-2", "percent": 101, "xp": 10}).json()["error"] == "Porcentaje inválido."
     assert client.post("/api/progress", headers=ana, json={"lessonId": "modulo-2", "percent": 50, "xp": 201}).json()["error"] == "XP inválido."
+
+
+def test_reto_wifi_estatico_se_descarga_y_se_gana(client):
+    """Los 8 retos Wi-Fi usan archivos fijos (challenges/static/) hasta tener archivos por jugador."""
+    import json
+
+    ana = client.tokens["Ana"]
+    catalog = {c["id"]: c for c in json.loads(challenges.CATALOG_FILE.read_text(encoding="utf-8"))["challenges"]}
+    pcap = client.get("/api/challenges/wpa-handshake-foundation/files/handshake.pcap", headers=ana)
+    assert pcap.status_code == 200 and pcap.content[:4] == b"\xd4\xc3\xb2\xa1"  # cabecera pcap real
+    wordlist = client.get("/api/challenges/wpa-handshake-foundation/files/wordlist.txt", headers=ana)
+    assert wordlist.status_code == 200 and wordlist.headers["content-type"].startswith("text/plain")
+
+    flag = catalog["wpa-handshake-foundation"]["flag"]
+    result = client.post("/api/submissions", headers=ana, json={"challengeId": "wpa-handshake-foundation", "flag": flag})
+    assert result.json()["ok"] is True and result.json()["points"] == 120

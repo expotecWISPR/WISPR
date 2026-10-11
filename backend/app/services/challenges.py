@@ -21,6 +21,10 @@ from app.services.challenge_generator import GENERATED_DIR, materialize_challeng
 
 CHALLENGES_DIR = Path(__file__).resolve().parents[3] / "challenges"
 CATALOG_FILE = CHALLENGES_DIR / "catalog" / "catalog.json"
+# Archivos fijos de los retos Wi-Fi (uno por reto, iguales para todos los
+# jugadores), generados con challenges/static/generar_wifi.js. Solución
+# temporal hasta tener archivos por jugador — ver ese script.
+STATIC_DIR = CHALLENGES_DIR / "static"
 
 # Mismos puntos por dificultad que el prototipo (`difficultyPoints`).
 DIFFICULTY_POINTS = {"Foundation": 120, "Medium": 200, "Hard": 340, "Expert": 500}
@@ -67,8 +71,10 @@ def artifact_path(challenge: Challenge, file_name: str) -> Path | None:
     """
     if file_name not in {f["name"] for f in challenge.files or []}:
         return None
-    path = GENERATED_DIR / file_name
-    return path if path.is_file() else None
+    for path in (STATIC_DIR / challenge.id / file_name, GENERATED_DIR / file_name):
+        if path.is_file():
+            return path
+    return None
 
 
 # --- Sembrado del catálogo -------------------------------------------------
