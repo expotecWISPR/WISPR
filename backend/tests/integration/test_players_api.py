@@ -14,6 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.db.base  # noqa: F401 — registra TODOS los modelos antes de create_all
 from app.db.session import Base, get_db
 from app.services import auth_flow
 from main import app
