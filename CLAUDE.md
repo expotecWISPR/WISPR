@@ -492,8 +492,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `/docs` oculto en producción. Dependencias: se quitó `python-jose` (y el código JWT muerto) y
   `python-multipart` (sin uso); se actualizaron fastapi/starlette/uvicorn/together/pydantic/scapy/
   pytest → `pip-audit` pasó de **36 vulnerabilidades a 0** (auditando un venv limpio). Para el
-  prototipo (no está en Git, no se tocó): parches verificados en `docs/parches/` (XSS en
-  `studentScoreChart`, `/api/kali/diagnose` filtraba versiones, `nodemailer` 10.0.11). 120 tests.
+  prototipo: parches en `docs/parches/` (XSS en `studentScoreChart`, `/api/kali/diagnose` filtraba
+  versiones, `nodemailer` 10.0.11) — **aplicados el 12 oct** con autorización, respaldo de los
+  originales en `/home/lonsoo/wispr_terminal_professional_respaldo_2026-10-12/`. Nota: el
+  `node_modules/node-pty` del prototipo solo trae binarios de Windows/Mac (no arranca en Linux sin
+  reinstalarlo). 120 tests.
 
 ## Pendiente (próximos pasos, en orden)
 

@@ -17,16 +17,16 @@ Los comandos se muestran con `curl` (Linux). En Windows es igual usando `curl.ex
 
 > **Actualizado el 12 oct (después de corregir).** Las secciones de abajo guardan el resultado
 > **inicial** de cada prueba. Las correcciones y los resultados al repetirlas están en el informe
-> `docs/Informe_pruebas_seguridad_WISPR.docx`, y los parches del prototipo en `docs/parches/`.
+> `docs/Informe_pruebas_seguridad_WISPR.docx`, y los parches del prototipo en `docs/parches/` (aplicados el 12 oct).
 
 | # | Prueba | Resultado inicial | Tras corregir | Estado |
 |---|---|---|---|---|
-| 1 | Permisos | Rutas privadas protegidas; no se puede actuar como otro jugador | Backend sin cambios; parche para `/api/kali/diagnose` del prototipo | ✅ |
-| 2 | Datos incorrectos | 2 errores 500 + nombre con HTML aceptado (XSS) | Todo responde 400 con mensaje claro; XSS corregido (backend + parche frontend) | ✅ |
+| 1 | Permisos | Rutas privadas protegidas; no se puede actuar como otro jugador | Backend sin cambios; `/api/kali/diagnose` del prototipo corregido | ✅ |
+| 2 | Datos incorrectos | 2 errores 500 + nombre con HTML aceptado (XSS) | Todo responde 400 con mensaje claro; XSS corregido en backend y frontend | ✅ |
 | 3 | Fuerza bruta | Bloqueo tras 5 fallos; sin límite por IP; enumeración por tiempo | + límite por IP/correo/jugador; tiempo constante (0,620 s contra 0,612 s) | ✅ |
 | 4 | Contenedor | No ejecutable sin Docker | Resultado esperado documentado | ⏳ |
 | 5 | Puertos | Solo 8000 en 127.0.0.1 | Confirmado: no accesible desde la red | ⏳ falta `nmap -sV` |
-| 6 | Dependencias | 36 vulnerabilidades (pip) + 1 alta (npm) | **0** (pip, venv limpio) y **0** (npm con parche) | ✅ |
+| 6 | Dependencias | 36 vulnerabilidades (pip) + 1 alta (npm) | **0** (pip, venv limpio) y **0** (npm, nodemailer 10.0.11 aplicado) | ✅ |
 | 7 | Restauración | Falta la "sección 12" | BD: alembic 5,4 s + seed 6,8 s | ⏳ |
 
 ---
