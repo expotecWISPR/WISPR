@@ -475,6 +475,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   - 87 tests pasan. Prueba manual con `uvicorn` real + Supabase: catálogo sin flags, flag XOR
     recuperada del archivo descargado, envíos, `/me`, ranking, lecciones; usuario temporal
     borrado al final (0 filas restantes).
+  - **Probado con la UI real (12 oct):** frontend `wispr_terminal_professional` servido sin
+    modificar ningún archivo (un servidor estático temporal reescribía el `<meta name="wispr-api">`
+    solo en la respuesta) + backend real + Supabase. El usuario completó registro con correo real,
+    retos, descargas, envío de flags, ranking y lecciones: todo funcionó. Cuenta de prueba y sus
+    datos borrados de Supabase al terminar (quedan solo los 10 retos del catálogo).
 
 ## Pendiente (próximos pasos, en orden)
 
