@@ -39,10 +39,11 @@ Decisiones clave a recordar:
   `ai_advisor.py`, templates, 25 tests) ya es código real en `main`, no solo diseño. Decisión
   del mismo día: el fine-tuning con LoRA queda en pausa (se está resolviendo por separado) y
   mientras tanto `ai_advisor.py` usa el modelo base de Together AI por **prompting simple**.
-* Python del venv: 3.12, 3.13 o 3.14. Verificado el 11 oct que `psycopg2-binary==2.9.12` (el
-  de `requirements.txt`) tiene wheels `win_amd64` para las tres — importa porque la mayoría del
-  equipo/usuarios usa Windows. Si se sube la versión de psycopg2 o de Python, volver a verificar
-  con `pip download --only-binary=:all: --platform win_amd64 --python-version 3XX`.
+* Python del venv: 3.12, 3.13 o 3.14, en Windows y Linux — verificado el 12 oct con
+  `uv pip compile --only-binary :all: --python-platform <plataforma> --python-version <v>` sobre
+  `requirements.txt`. Importa porque la mayoría del equipo usa Windows. Lección: el 11 oct se
+  afirmó lo mismo revisando solo psycopg2 y era falso (pydantic-core 2.27 no tenía wheel para
+  3.14); revisar SIEMPRE el requirements completo, no un paquete suelto.
 * Política de equipo (26 ago): nadie commitea directo a `main`, cada persona trabaja en su
   rama `feature/<algo>` y junta con Pull Request. En la práctica esto no se cumplió entre el 26
   ago y el 7 oct porque esta regla vivía solo en la rama sin fusionar — Persona 1 siguió

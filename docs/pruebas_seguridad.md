@@ -15,15 +15,19 @@ Los comandos se muestran con `curl` (Linux). En Windows es igual usando `curl.ex
 
 ## Resumen
 
-| # | Prueba | Resultado | Estado |
-|---|---|---|---|
-| 1 | Permisos | Sin sesión o con token falso → 401. El `playerId` enviado por el cliente se ignora. `/api/kali/diagnose` no existe en este backend (404) | ✅ |
-| 2 | Datos incorrectos | Contraseña vacía y flag vacía se rechazan. **Contraseña de 300 caracteres → error 500.** **Correo de 300 → error 500 al verificar.** Nombre con `<script>` se acepta y se guarda tal cual | ⚠️ 3 hallazgos |
-| 3 | Fuerza bruta | Bloqueo tras 5 fallos; la contraseña correcta se rechaza mientras dura (15 min) | ✅ |
-| 4 | Contenedor | No ejecutable en este equipo (sin Docker) | ⏳ Pendiente |
-| 5 | Puertos | Sin `nmap`; escaneo TCP equivalente: el backend solo escucha en `127.0.0.1:8000` | ⏳ Falta `nmap -sV` |
-| 6 | Dependencias | pip-audit: 36 vulnerabilidades únicas en 7 paquetes. npm audit: 1 alta (`nodemailer`) | ⚠️ Actualizar |
-| 7 | Restauración | Falta el documento con la "sección 12" | ⏳ Pendiente |
+> **Actualizado el 12 oct (después de corregir).** Las secciones de abajo guardan el resultado
+> **inicial** de cada prueba. Las correcciones y los resultados al repetirlas están en el informe
+> `docs/Informe_pruebas_seguridad_WISPR.docx`, y los parches del prototipo en `docs/parches/`.
+
+| # | Prueba | Resultado inicial | Tras corregir | Estado |
+|---|---|---|---|---|
+| 1 | Permisos | Rutas privadas protegidas; no se puede actuar como otro jugador | Backend sin cambios; parche para `/api/kali/diagnose` del prototipo | ✅ |
+| 2 | Datos incorrectos | 2 errores 500 + nombre con HTML aceptado (XSS) | Todo responde 400 con mensaje claro; XSS corregido (backend + parche frontend) | ✅ |
+| 3 | Fuerza bruta | Bloqueo tras 5 fallos; sin límite por IP; enumeración por tiempo | + límite por IP/correo/jugador; tiempo constante (0,620 s contra 0,612 s) | ✅ |
+| 4 | Contenedor | No ejecutable sin Docker | Resultado esperado documentado | ⏳ |
+| 5 | Puertos | Solo 8000 en 127.0.0.1 | Confirmado: no accesible desde la red | ⏳ falta `nmap -sV` |
+| 6 | Dependencias | 36 vulnerabilidades (pip) + 1 alta (npm) | **0** (pip, venv limpio) y **0** (npm con parche) | ✅ |
+| 7 | Restauración | Falta la "sección 12" | BD: alembic 5,4 s + seed 6,8 s | ⏳ |
 
 ---
 

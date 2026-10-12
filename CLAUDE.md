@@ -296,11 +296,12 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   nadie commitea directo a `main`, cada persona trabaja en su rama `feature/<algo>` y junta con
   Pull Request. No se cumplió entre el 26 ago y el 7 oct por esto mismo — vale la pena
   re-confirmarla con el equipo ahora que ya está visible para ambos en `main`.
-* Versión de Python para el venv del backend: **3.12, 3.13 o 3.14** sirven. La restricción
-  anterior ("solo 3.12") era porque `psycopg2-binary` no tenía instalador precompilado para
-  Windows en 3.14. **Verificado el 11 oct:** `psycopg2-binary==2.9.12` (el de
-  `requirements.txt`) ya publica wheels `win_amd64` para cp312, cp313 y cp314, así que en
-  Windows se instala sin compilar nada ni tener PostgreSQL local.
+* Versión de Python para el venv del backend: **3.12, 3.13 o 3.14** sirven, en Windows y Linux.
+  **Verificado el 12 oct con `uv pip compile --only-binary :all:`** (simula la instalación en cada
+  plataforma sin compilar nada) para las 6 combinaciones. Corrección: el 11 oct se dijo lo mismo
+  mirando solo `psycopg2-binary`, pero `pydantic==2.10.4` (su `pydantic-core`) **no tenía
+  instalador para 3.14** y la instalación habría fallado; se resolvió subiendo a `pydantic==2.13.5`.
+  Si se cambia cualquier versión de `requirements.txt`, repetir esa verificación.
 * **Auth con MFA migrado de `wispr_terminal_professional` a FastAPI (7 oct).** Ese proyecto
   (carpeta aparte, `/home/lonsoo/wispr_terminal_professional`, no es un repo Git) tenía un
   backend Node real y ya probado con correo real: registro/login con código de 6 dígitos,
@@ -480,6 +481,19 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     solo en la respuesta) + backend real + Supabase. El usuario completó registro con correo real,
     retos, descargas, envío de flags, ranking y lecciones: todo funcionó. Cuenta de prueba y sus
     datos borrados de Supabase al terminar (quedan solo los 10 retos del catálogo).
+
+* **Pruebas de seguridad para el informe + corrección de vulnerabilidades (12 oct).** Resultados
+  en `docs/pruebas_seguridad.md` (y el `.docx` del informe en `docs/`). Corregido en el backend:
+  error 500 con contraseña > 72 bytes (registro y login) y con correo > 255; nombre con HTML ahora
+  se rechaza (lista de caracteres permitidos); correo con regex estricto; contraseña mínima 8
+  (antes 4); login con tiempo constante (no revela qué usuarios existen); límite de peticiones en
+  memoria (`app/core/rate_limit.py`: por IP generoso por el NAT del colegio, 3 registros/10 min por
+  correo, 30 envíos/min por jugador); cabeceras de seguridad; CORS configurable (`CORS_ORIGINS`);
+  `/docs` oculto en producción. Dependencias: se quitó `python-jose` (y el código JWT muerto) y
+  `python-multipart` (sin uso); se actualizaron fastapi/starlette/uvicorn/together/pydantic/scapy/
+  pytest → `pip-audit` pasó de **36 vulnerabilidades a 0** (auditando un venv limpio). Para el
+  prototipo (no está en Git, no se tocó): parches verificados en `docs/parches/` (XSS en
+  `studentScoreChart`, `/api/kali/diagnose` filtraba versiones, `nodemailer` 10.0.11). 120 tests.
 
 ## Pendiente (próximos pasos, en orden)
 

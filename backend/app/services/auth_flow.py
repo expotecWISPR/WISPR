@@ -39,7 +39,24 @@ from app.core.time_utils import as_utc
 from app.models.user import User
 
 GENDERS = {"femenino", "masculino", "otro"}
-_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+# Correo: solo los caracteres que de verdad usan los proveedores (el regex
+# anterior aceptaba cualquier cosa sin espacios, incluso `<script>@x.com`).
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+# Máximo del estándar (RFC 5321). La columna admite 255: sin este límite,
+# un correo más largo pasaba el registro y fallaba con error 500 al verificar.
+MAX_EMAIL_LENGTH = 254
+# Nombre: letras (con tildes/ñ, cualquier alfabeto), números, espacios y
+# . ' - — lista de PERMITIDOS, no de prohibidos. Bloquea `<` `>` y cualquier
+# marcado HTML: el nombre se muestra en el frontend, y en el gráfico
+# "Puntos por estudiante" se inserta sin escapar (XSS almacenado, ver
+# docs/pruebas_seguridad.md). Esto es la defensa del lado del servidor; el
+# frontend igual debe escapar.
+_NAME_RE = re.compile(r"^[\w .'-]+$")
+# Contraseña: mínimo 8 (recomendación NIST SP 800-63B; antes eran 4) y
+# máximo 64 caracteres / 72 bytes (límite de bcrypt: más largo daba error 500).
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 64
+MAX_PASSWORD_BYTES = 72
 _HANDLE_INVALID_CHARS_RE = re.compile(r"[^a-z0-9._-]")
 
 # Mensaje ÚNICO para credenciales inválidas: no revela si la cuenta existe.
@@ -68,6 +85,10 @@ class PendingLogin:
     expires_at: float = 0.0
     last_sent_at: float = 0.0
 
+
+# Hash de relleno para `begin_login` (ver comentario ahí). Se calcula una vez
+# al importar el módulo.
+_DUMMY_HASH = hash_password("wispr-relleno-para-tiempo-constante")
 
 # En memoria, un diccionario por proceso — ver nota en el docstring del módulo.
 _pending_registrations: dict[str, PendingRegistration] = {}
@@ -194,13 +215,17 @@ def begin_registration(data: dict, db: DbSession) -> dict:
 
     if not full_name:
         return {"ok": False, "error": "Escribe un nombre."}
+    if not _NAME_RE.match(full_name):
+        return {"ok": False, "error": "El nombre solo puede tener letras, números, espacios, puntos, guiones y apóstrofes."}
     if len(handle) < 3:
         return {"ok": False, "error": "El usuario debe tener al menos 2 caracteres válidos."}
     if gender not in GENDERS:
         return {"ok": False, "error": "Selecciona un género."}
-    if len(password) < 4:
-        return {"ok": False, "error": "La contraseña debe tener al menos 4 caracteres."}
-    if not _EMAIL_RE.match(email):
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return {"ok": False, "error": f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres."}
+    if len(password) > MAX_PASSWORD_LENGTH or len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        return {"ok": False, "error": f"La contraseña no puede tener más de {MAX_PASSWORD_LENGTH} caracteres."}
+    if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_RE.match(email):
         return {"ok": False, "error": "Escribe un correo válido."}
 
     # Los dominios institucionales conservan su rol automático; cualquier
@@ -298,7 +323,11 @@ def begin_login(data: dict, db: DbSession) -> dict:
     handle = normalize_handle(data.get("handle") or "")
     password = str(data.get("password") or "")
     user = db.execute(select(User).where(User.username == handle)).scalar_one_or_none()
-    creds_ok = user is not None and verify_password(password, user.password_hash)
+    # Si el usuario no existe se compara igual contra un hash de relleno: así
+    # la respuesta tarda lo mismo (~bcrypt) exista o no la cuenta. Sin esto,
+    # midiendo el tiempo de respuesta se podía averiguar qué usuarios existen
+    # aunque el mensaje de error sea el mismo.
+    creds_ok = verify_password(password, user.password_hash if user is not None else _DUMMY_HASH) and user is not None
 
     now = datetime.now(timezone.utc)
     # Cuenta bloqueada (manual o automática): el motivo SOLO se revela a

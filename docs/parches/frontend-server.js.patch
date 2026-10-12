@@ -1,0 +1,60 @@
+--- a/server.js
++++ b/server.js
+@@ -1006,21 +1006,26 @@
+   return ensureImage("target", TARGET_IMAGE, ["build", "--tag", TARGET_IMAGE, "--file", TARGET_DOCKERFILE, TARGET_CONTEXT], "No se pudo crear la imagen del objetivo simulado.");
+ }
+ 
+-async function diagnose(player) {
++// `full` (solo administradores): versiones de Docker/Node y sistema operativo
++// del host. Un estudiante ve solo el estado de SU contenedor: las versiones
++// exactas le sirven a un atacante para buscar vulnerabilidades conocidas.
++async function diagnose(player, { full = false } = {}) {
+   const environment = player ? environmentFor(player) : null;
+-  const checks = [
++  const checks = full ? [
+     ["docker version", ["version", "--format", "client={{.Client.Version}} server={{.Server.Version}} os={{.Server.Os}}"]],
+     ["docker info (OS)", ["info", "--format", "{{.OperatingSystem}} / {{.OSType}}"]],
+     [`imagen ${IMAGE}`, ["image", "inspect", "--format", "{{.Id}} creada {{.Created}}", IMAGE]],
+     [`imagen ${TARGET_IMAGE}`, ["image", "inspect", "--format", "{{.Id}} creada {{.Created}}", TARGET_IMAGE]]
+-  ];
++  ] : [];
+   if (environment) {
+     checks.push([`red ${environment.network}`, ["network", "inspect", "--format", "{{.Name}} internal={{.Internal}}", environment.network]]);
+     checks.push([`contenedor ${environment.kali}`, ["inspect", "--format", "running={{.State.Running}} exit={{.State.ExitCode}} error={{.State.Error}}", environment.kali]]);
+     checks.push([`contenedor ${environment.target}`, ["inspect", "--format", "running={{.State.Running}}", environment.target]]);
+     checks.push([`exec en ${environment.kali}`, ["exec", "-u", "kali", environment.kali, "bash", "-lc", "id && test -w /workspace && echo workspace:rw && ls /lab/challenges | head -3 && ctf help | head -1"]]);
+   }
+-  const lines = [`WISPR diagnóstico ${new Date().toISOString()}`, `host=${process.platform} node=${process.version} docker_bin=${DOCKER_BIN}`, `build kali=${builds.kali.status} target=${builds.target.status}`, ""];
++  const lines = [`WISPR diagnóstico ${new Date().toISOString()}`];
++  if (full) lines.push(`host=${process.platform} node=${process.version} docker_bin=${DOCKER_BIN}`);
++  lines.push(`build kali=${builds.kali.status} target=${builds.target.status}`, "");
+   for (const [label, args] of checks) {
+     const result = await run(DOCKER_BIN, args, { timeout: 20000 });
+     lines.push(`${result.ok ? "OK  " : "FAIL"} ${label}`);
+@@ -1030,6 +1035,8 @@
+   return lines.join("\n");
+ }
+ 
++const diagnoseLastRun = new Map(); // playerId -> último diagnóstico (ms)
++
+ // Comprueba que el bind de /workspace dentro del contenedor refleja de verdad la
+ // carpeta del host: escribe un centinela en el host y lo busca dentro. Si no
+ // aparece, el montaje quedó obsoleto (p. ej. tras recrear la carpeta o mover el
+@@ -1732,8 +1739,16 @@
+   }
+   if (url.pathname === "/api/kali/diagnose" && req.method === "GET") {
+     const player = playerId(url.searchParams.get("playerId"));
++    // Máximo un diagnóstico cada 10 s por jugador: cada uno lanza ~8 comandos
++    // docker, y sin límite se podía saturar el host pidiéndolo en bucle.
++    const now = Date.now();
++    if (now - (diagnoseLastRun.get(player) || 0) < 10000) {
++      return sendJson(res, 429, { ok: false, error: "Espera unos segundos antes de volver a diagnosticar." });
++    }
++    diagnoseLastRun.set(player, now);
++    const full = isAdminPlayer(registry.players[req.sessionPlayerId]);
+     res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+-    return res.end(await diagnose(player));
++    return res.end(await diagnose(player, { full }));
+   }
+   if (url.pathname === "/api/challenges/active" && req.method === "POST") {
+     const body = await parseJson(req);

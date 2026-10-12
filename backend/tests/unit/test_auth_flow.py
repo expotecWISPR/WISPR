@@ -99,8 +99,34 @@ class TestBeginRegistrationValidaciones:
         assert draft["role"] == "estudiante"
 
     def test_rechaza_contrasena_corta(self, db):
-        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": "abc"}, db)
-        assert draft == {"ok": False, "error": "La contraseña debe tener al menos 4 caracteres."}
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": "abc1234"}, db)
+        assert draft == {"ok": False, "error": "La contraseña debe tener al menos 8 caracteres."}
+
+    def test_rechaza_contrasena_vacia(self, db):
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": ""}, db)
+        assert draft["ok"] is False
+
+    @pytest.mark.parametrize("password", ["A" * 65, "A" * 300, "ñ" * 40])  # 40 ñ = 80 bytes > 72
+    def test_rechaza_contrasena_demasiado_larga_sin_error_500(self, db, password):
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": password}, db)
+        assert draft == {"ok": False, "error": "La contraseña no puede tener más de 64 caracteres."}
+
+    def test_rechaza_correo_de_mas_de_254_caracteres(self, db):
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "email": "a" * 300 + "@example.com"}, db)
+        assert draft == {"ok": False, "error": "Escribe un correo válido."}
+
+    @pytest.mark.parametrize("email", ["<script>alert(1)</script>@example.com", "ana@exa mple.com", "ana\"@x.com"])
+    def test_rechaza_correo_con_caracteres_raros(self, db, email):
+        assert auth_flow.begin_registration({**VALID_REGISTRATION, "email": email}, db)["ok"] is False
+
+    @pytest.mark.parametrize("name", ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "Ana\x00", 'Ana"'])
+    def test_rechaza_nombre_con_marcado_html(self, db, name):
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "name": name}, db)
+        assert draft["ok"] is False and "El nombre solo puede tener" in draft["error"]
+
+    @pytest.mark.parametrize("name", ["José María Ñúñez", "Ana O'Neil", "Jean-Luc Picard", "Ana 2"])
+    def test_acepta_nombres_reales(self, db, name):
+        assert auth_flow.begin_registration({**VALID_REGISTRATION, "name": name}, db)["ok"] is True
 
     def test_rechaza_correo_invalido(self, db):
         draft = auth_flow.begin_registration({**VALID_REGISTRATION, "email": "no-es-un-correo"}, db)
@@ -173,6 +199,21 @@ class TestLoginConMfa:
         db.commit()
         result = auth_flow.begin_login({"handle": "ana", "password": "clave1234"}, db)
         assert result == {"ok": True, "admin": True, "player": result["player"]}
+
+
+class TestLoginEntradasExtremas:
+    def test_contrasena_de_300_caracteres_contra_cuenta_existente_no_da_error_500(self, db):
+        _register_and_verify(db)
+        result = auth_flow.begin_login({"handle": "ana", "password": "A" * 300}, db)
+        assert result == {"ok": False, "error": auth_flow.GENERIC_LOGIN_ERROR}
+
+    def test_usuario_inexistente_tambien_pasa_por_bcrypt(self, db, monkeypatch):
+        """Mismo costo exista o no la cuenta: no se puede averiguar por tiempo."""
+        llamadas = []
+        real = auth_flow.verify_password
+        monkeypatch.setattr(auth_flow, "verify_password", lambda p, h: llamadas.append(h) or real(p, h))
+        auth_flow.begin_login({"handle": "no-existe", "password": "lo-que-sea"}, db)
+        assert llamadas == [auth_flow._DUMMY_HASH]
 
 
 class TestBloqueoPorFuerzaBruta:

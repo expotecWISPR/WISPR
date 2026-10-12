@@ -23,6 +23,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core import rate_limit
+from app.core.rate_limit import limit_per_ip
 from app.core.sessions import create_session, resolve_session, revoke_session
 from app.db.session import get_db
 from app.models.user import User
@@ -30,6 +32,17 @@ from app.services import auth_flow
 from app.services.email import send_verification_code
 
 router = APIRouter(tags=["players"])
+
+# Límites por IP generosos A PROPÓSITO: en el colegio todos los estudiantes
+# salen a internet por la MISMA IP pública (NAT de la red institucional), y un
+# grupo de 30 registrándose a la vez no debe bloquearse. Frenan scripts
+# automatizados; la protección fina es por cuenta (bloqueo tras 5 fallos) y
+# por correo (abajo, en /register).
+_AUTH_LIMIT = Depends(limit_per_ip("auth", limit=60, window_seconds=60))
+_CODE_LIMIT = Depends(limit_per_ip("codes", limit=30, window_seconds=60))
+# Como mucho 3 registros (=3 correos con código) al mismo correo cada 10 min:
+# impide usar el registro para llenarle la bandeja a otra persona.
+_REGISTER_PER_EMAIL = (3, 600)
 
 
 async def _json_body(request: Request) -> dict:
@@ -67,12 +80,17 @@ def get_current_player(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[_CODE_LIMIT])
 async def register(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     draft = auth_flow.begin_registration(body, db)
     if not draft["ok"]:
         return JSONResponse(status_code=400, content=draft)
+    try:
+        rate_limit.check("register-email", draft["email"], *_REGISTER_PER_EMAIL)
+    except rate_limit.RateLimitExceeded:
+        auth_flow.discard_pending_registration(draft["token"])
+        raise
 
     mail = send_verification_code(draft["email"], draft.pop("code"))
     if not mail.ok:
@@ -90,7 +108,7 @@ async def register(request: Request, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/verify")
+@router.post("/verify", dependencies=[_AUTH_LIMIT])
 async def verify(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     result = auth_flow.complete_registration(body.get("token"), body.get("code"), db)
@@ -99,7 +117,7 @@ async def verify(request: Request, db: Session = Depends(get_db)):
     return JSONResponse(status_code=200 if result["ok"] else 400, content=result)
 
 
-@router.post("/resend")
+@router.post("/resend", dependencies=[_CODE_LIMIT])
 async def resend(request: Request):
     body = await _json_body(request)
     draft = auth_flow.resend_verification_code(body.get("token"))
@@ -111,7 +129,7 @@ async def resend(request: Request):
     return {"ok": True, "dev": mail.dev, "devCode": mail.code if mail.dev else None}
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[_AUTH_LIMIT])
 async def login(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     draft = auth_flow.begin_login(body, db)
@@ -139,7 +157,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/login-verify")
+@router.post("/login-verify", dependencies=[_AUTH_LIMIT])
 async def login_verify(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     result = auth_flow.complete_login(body.get("token"), body.get("code"), db)
@@ -148,7 +166,7 @@ async def login_verify(request: Request, db: Session = Depends(get_db)):
     return JSONResponse(status_code=200 if result["ok"] else 400, content=result)
 
 
-@router.post("/login-resend")
+@router.post("/login-resend", dependencies=[_CODE_LIMIT])
 async def login_resend(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     draft = auth_flow.resend_login_code(body.get("token"), db)

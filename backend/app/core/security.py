@@ -1,25 +1,19 @@
 """
-Seguridad: hash de contraseñas y tokens JWT.
+Seguridad: hash de contraseñas.
 
-Dos responsabilidades separadas en este archivo:
+Nunca se guarda la contraseña real en la base de datos, solo su hash (con
+bcrypt, en `User.password_hash`). `hash_password()` la convierte antes de
+guardarla; `verify_password()` compara una contraseña en texto plano contra
+el hash guardado, sin necesitar "revertir" el hash (eso no se puede).
 
-1. Contraseñas: nunca se guarda la contraseña real en la base de datos,
-   solo su hash (con bcrypt, ya lo usamos en el modelo User como
-   `password_hash`). `hash_password()` la convierte antes de guardarla;
-   `verify_password()` compara una contraseña en texto plano contra el
-   hash guardado, sin necesitar "revertir" el hash (eso no se puede).
-
-2. JWT (JSON Web Token): la credencial que prueba que un usuario ya inició
-   sesión. `create_access_token()` genera uno al hacer login;
-   `decode_access_token()` lo verifica en cada petición protegida.
+Las funciones de JWT (`create_access_token`/`decode_access_token`) se
+quitaron el 12 oct: desde el 7 oct las sesiones son tokens opacos
+revocables guardados en la BD (`app/core/sessions.py`), así que el JWT ya no
+se usaba, y su dependencia (`python-jose`) arrastraba vulnerabilidades
+conocidas (ver docs/pruebas_seguridad.md).
 """
 
-from datetime import datetime, timedelta, timezone
-
 import bcrypt
-from jose import JWTError, jwt
-
-from app.core.config import settings
 
 # bcrypt trabaja con bytes, no con texto directamente, y tiene un límite
 # real del algoritmo: no puede procesar contraseñas de más de 72 bytes.
@@ -47,34 +41,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     hash guardado — vuelve a hashear `plain_password` con la misma sal
     (que va incluida dentro del propio hash) y compara los resultados.
     """
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """
-    Genera un JWT firmado, con el contenido de `data` adentro.
-
-    Se usa así al hacer login: create_access_token({"sub": user.email}).
-    `expires_delta` permite personalizar cuánto dura el token; si no se
-    pasa, se usa settings.ACCESS_TOKEN_EXPIRE_MINUTES (60 min por defecto).
-    """
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    to_encode["exp"] = expire
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def decode_access_token(token: str) -> dict | None:
-    """
-    Verifica un JWT y devuelve su contenido si es válido.
-
-    Devuelve None si el token está mal firmado, corrupto, o ya expiró —
-    nunca lanza una excepción hacia afuera, para que quien lo use pueda
-    simplemente revisar "¿dio None? entonces no está autenticado."
-    """
-    try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        return None
+    password_bytes = plain_password.encode("utf-8")
+    # Ninguna contraseña guardada puede pasar de 72 bytes (hash_password lo
+    # impide), así que una más larga nunca coincide. Se corta acá porque
+    # bcrypt.checkpw lanza ValueError con más de 72 bytes, y eso salía como
+    # un error 500 en el login.
+    if len(password_bytes) > _MAX_PASSWORD_BYTES:
+        return False
+    return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))

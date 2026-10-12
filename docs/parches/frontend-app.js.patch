@@ -1,0 +1,37 @@
+--- a/app.js
++++ b/app.js
+@@ -3418,6 +3418,8 @@
+   if (authMode === "register" && !payload.gender) return toast("Selecciona tu género.", "warn");
+   if (authMode === "register" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return toast("Escribe un correo válido.", "warn");
+   if (!payload.handle || payload.password.length < 4) return toast("Escribe un usuario y una contraseña de al menos 4 caracteres.", "warn");
++  // El backend FastAPI exige 8 a 64 caracteres al registrarse (NIST SP 800-63B).
++  if (authMode === "register" && (payload.password.length < 8 || payload.password.length > 64)) return toast("La contraseña debe tener entre 8 y 64 caracteres.", "warn");
+   const submitButton = form.querySelector("button[type=submit]");
+   if (submitButton) submitButton.disabled = true;
+   try {
+@@ -4899,6 +4901,14 @@
+   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+ }
+ 
++// Escapa texto para insertarlo dentro de markup SVG/HTML armado como string
++// (parseSVG usa innerHTML). Sin esto, un nombre de estudiante como
++// `<img src=x onerror=...>` se ejecutaría en la sesión del profesor que abre
++// el gráfico "Puntos por estudiante" (XSS almacenado).
++function escapeMarkup(text) {
++  return String(text ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
++}
++
+ // Barras horizontales de puntos por estudiante — mismo patrón visual que
+ // roleDistributionChart, pero con filas dinámicas y un solo color (no hay
+ // "categorías" que distinguir, así que no hace falta validar paleta).
+@@ -4920,7 +4930,9 @@
+     const mark = barW > 0
+       ? `<path d="M${labelWidth},${barY + barH} L${labelWidth},${barY + r} Q${labelWidth},${barY} ${labelWidth + r},${barY} L${labelWidth + barW - r},${barY} Q${labelWidth + barW},${barY} ${labelWidth + barW},${barY + r} L${labelWidth + barW},${barY + barH} Z" fill="var(--orange)"></path>`
+       : "";
+-    return `<g><title>${row.name || row.handle}: ${row.score} pts</title><text x="0" y="${y + rowHeight / 2 + 4}" class="chart-row-label">${truncateLabel(row.name || row.handle, 16)}</text>${mark}<text x="${labelWidth + barW + 8}" y="${y + rowHeight / 2 + 4}" class="chart-value-label">${row.score}</text></g>`;
++    const label = row.name || row.handle;
++    const score = Number(row.score) || 0;
++    return `<g><title>${escapeMarkup(label)}: ${score} pts</title><text x="0" y="${y + rowHeight / 2 + 4}" class="chart-row-label">${escapeMarkup(truncateLabel(label, 16))}</text>${mark}<text x="${labelWidth + barW + 8}" y="${y + rowHeight / 2 + 4}" class="chart-value-label">${score}</text></g>`;
+   }).join("");
+ 
+   return parseSVG(`<svg viewBox="0 0 ${width} ${height}" class="activity-chart role-chart" role="img" aria-label="Puntos por estudiante">${bars}</svg>`);

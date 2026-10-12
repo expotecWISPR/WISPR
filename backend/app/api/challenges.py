@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.players import _json_body, get_current_player
+from app.core import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.services import challenges, lessons, scoring
@@ -78,6 +79,9 @@ def download_file(
 
 @router.post("/submissions")
 async def submit(request: Request, db: Session = Depends(get_db), player: User = Depends(get_current_player)):
+    # Por jugador (no por IP): 30 envíos por minuto sobran para una persona
+    # y frenan a un script que pruebe flags en masa.
+    rate_limit.check("submissions", str(player.id), limit=30, window_seconds=60)
     body = await _json_body(request)
     return scoring.submit_flag(db, player, body.get("challengeId"), body.get("flag"), source="web")
 

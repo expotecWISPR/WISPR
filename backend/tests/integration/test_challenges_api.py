@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.db.base  # noqa: F401 — registra TODOS los modelos antes de create_all
+from app.core import rate_limit
 from app.core.sessions import create_session
 from app.db.session import Base, get_db
 from app.models.user import User
@@ -26,6 +27,7 @@ def client(tmp_path, monkeypatch):
     # Los archivos generados van a una carpeta temporal, no a challenges/generated/.
     monkeypatch.setattr(challenge_generator, "GENERATED_DIR", tmp_path)
     monkeypatch.setattr(challenges, "GENERATED_DIR", tmp_path)
+    rate_limit.reset()
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -153,3 +155,33 @@ def test_reto_wifi_estatico_se_descarga_y_se_gana(client):
     flag = catalog["wpa-handshake-foundation"]["flag"]
     result = client.post("/api/submissions", headers=ana, json={"challengeId": "wpa-handshake-foundation", "flag": flag})
     assert result.json()["ok"] is True and result.json()["points"] == 120
+
+
+def test_cabeceras_de_seguridad_en_la_api(client):
+    headers = client.get("/api/challenges").headers
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["x-frame-options"] == "DENY"
+    assert headers["referrer-policy"] == "no-referrer"
+    assert headers["cache-control"] == "no-store"
+    assert "default-src 'none'" in headers["content-security-policy"]
+
+
+def test_mas_de_30_envios_por_minuto_responde_429(client):
+    ana = client.tokens["Ana"]
+    for _ in range(30):
+        assert client.post("/api/submissions", headers=ana, json={"challengeId": "crypto-xor-01", "flag": "WISPR{nope}"}).status_code == 200
+    blocked = client.post("/api/submissions", headers=ana, json={"challengeId": "crypto-xor-01", "flag": "WISPR{nope}"})
+    assert blocked.status_code == 429
+    assert blocked.json() == {"ok": False, "error": rate_limit.TOO_MANY}
+    # El límite es por jugador: Beto sigue pudiendo enviar.
+    assert client.post("/api/submissions", headers=client.tokens["Beto"], json={"challengeId": "crypto-xor-01", "flag": "WISPR{nope}"}).status_code == 200
+
+
+def test_registro_repetido_al_mismo_correo_se_limita(client):
+    body = {"name": "Spam", "handle": "spam", "gender": "otro", "password": "clave12345", "email": "victima@example.com"}
+    for i in range(3):
+        assert client.post("/api/players/register", json={**body, "handle": f"spam{i}"}).status_code == 200
+    blocked = client.post("/api/players/register", json={**body, "handle": "spam9"})
+    assert blocked.status_code == 429
+    # Otro correo desde la misma IP no se ve afectado (límite por correo, no global).
+    assert client.post("/api/players/register", json={**body, "handle": "otro", "email": "otra@example.com"}).status_code == 200

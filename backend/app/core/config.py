@@ -36,10 +36,11 @@ class Settings(BaseSettings):
     # ── Base de datos (Supabase PostgreSQL) ──────────────────────────
     DATABASE_URL: str
 
-    # ── Autenticación JWT ─────────────────────────────────────────────
+    # ── Secreto del servidor ─────────────────────────────────────────
+    # Ya no firma JWT (se quitaron el 12 oct: las sesiones viven en la BD).
+    # Se conserva como secreto del servidor para lo que lo necesite (ej. la
+    # semilla de las flags por jugador, cuando se migre esa parte).
     SECRET_KEY: str = Field(..., min_length=32)
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # ── Together AI (recomendaciones, generación de retos) ────────────
     TOGETHER_API_KEY: str
@@ -82,6 +83,11 @@ class Settings(BaseSettings):
 
     # ── Entorno ──────────────────────────────────────────────────────
     ENVIRONMENT: Literal["development", "production"] = "development"
+
+    # Orígenes que pueden llamar a la API desde un navegador (CORS), separados
+    # por coma. "*" = cualquiera (desarrollo). En producción, el dominio real
+    # del frontend, ej. "https://wispr.ejemplo.com" (ver CONFIG AWS).
+    CORS_ORIGINS: str = "*"
 
 
 @lru_cache

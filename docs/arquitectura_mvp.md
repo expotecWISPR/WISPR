@@ -208,8 +208,12 @@ varios workers, un código creado en un proceso no existe en los otros y la veri
 azar. Correr:
 
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
+uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --no-server-header
 ```
+
+(`--no-server-header`: no anuncia "uvicorn" en cada respuesta. uvicorn ya confía en la cabecera
+`X-Forwarded-For` solo si viene de `127.0.0.1` —su valor por defecto—, que es justo nginx: así el
+límite de peticiones por IP ve la IP real del estudiante y nadie puede falsificarla.)
 
 (`127.0.0.1`: solo nginx habla con uvicorn; el puerto 8000 no se abre en el Security Group.)
 Un solo worker sobra para EXPOTEC y para un aula. Si algún día hace falta más de uno, primero hay
@@ -241,8 +245,21 @@ elástica) y reenvía a `127.0.0.1:8000`. El WebSocket de la terminal, cuando ex
 
 ### 🟡 6. Restringir CORS
 
-`main.py` hoy acepta cualquier origen (`allow_origins=["*"]`). En producción, cambiarlo al dominio
-real del frontend.
+En el `.env` del servidor: `CORS_ORIGINS=https://<dominio-del-frontend>` (varios separados por
+coma). El valor por defecto `*` es solo para desarrollo. Probado el 12 oct: un origen no permitido
+recibe 400 en el preflight.
+
+### 🟡 7. HSTS en nginx
+
+En el bloque `server` de HTTPS: `add_header Strict-Transport-Security "max-age=31536000" always;`
+— obliga al navegador a usar siempre HTTPS. Las demás cabeceras de seguridad (nosniff, DENY,
+no-referrer, CSP de la API) ya las pone el backend.
+
+### ✅ Ya resuelto en el código (12 oct)
+
+Con `ENVIRONMENT=production`: `/docs`, `/redoc` y `/openapi.json` dan 404; el MFA nunca cae a modo
+desarrollo. Siempre: límite de peticiones por IP/correo/jugador, validación de largo y formato en el
+registro, cabeceras de seguridad. Detalle en `docs/pruebas_seguridad.md`.
 
 ### ✅ Ya compatible (no requiere nada)
 
