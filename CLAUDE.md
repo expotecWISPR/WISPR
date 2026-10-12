@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 11 de octubre de 2026.
+**Última actualización:** 12 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -361,7 +361,8 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     archivos de la Persona 2.
   - **Terminal Kali/Docker:** por ahora permanece como servicio Node aparte del prototipo; su
     ubicación definitiva se decidirá más adelante (criterio: que sea funcional y no exponga
-    datos). No forma parte de esta migración de auth.
+    datos). No forma parte de esta migración de auth. **Decidido el 12 oct:** se queda en Node, en
+    "modo conectado" con FastAPI (ver "Progreso técnico").
 
 ## Progreso técnico
 
@@ -498,6 +499,29 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `node_modules/node-pty` del prototipo solo trae binarios de Windows/Mac (no arranca en Linux sin
   reinstalarlo). 120 tests.
 
+* **Terminal Kali conectada a FastAPI — "opción A" (12 oct).** Problema: el frontend solo puede
+  hablar con un servidor; con FastAPI no había terminal, y con Node la terminal usaba sus propias
+  cuentas/flags (`lab/data/*.json`), sin ver Supabase. Decisión: **nginx reparte por ruta** en la
+  misma instancia — `/ws/terminal`, `/api/kali/*`, `/api/challenges/active` y `/api/platform/status`
+  → Node (`127.0.0.1:8787`, también sirve el frontend); todo el resto de `/api/` → FastAPI
+  (`127.0.0.1:8000`). Config en `deploy/nginx/wispr.conf`. Se descartó pasar la terminal a Python
+  (Docker + pty + WebSocket en FastAPI) por riesgo a 2 semanas y media de EXPOTEC.
+  - Node en **modo conectado** (`WISPR_BACKEND_URL`): valida cada token con `GET /api/players/me`
+    (FastAPI sigue siendo la única fuente de verdad de sesiones; si no responde, Node da 503 = falla
+    cerrado), baja de FastAPI el catálogo y los archivos del reto al workspace (mismos archivos que la
+    web → la flag coincide), reenvía cada `ctf submit` a `POST /api/submissions` con el token del
+    jugador y `source: "terminal"`, y cierra una terminal abierta si la sesión deja de valer (revisa
+    cada 60 s). Sin la variable, el prototipo funciona solo como antes.
+  - Backend: `POST /api/submissions` acepta `source: "terminal"` (solo etiqueta; no cambia puntos).
+    121 tests.
+  - Parche en `docs/parches/terminal-modo-conectado.patch` (**aplicado** con respaldo en
+    `/home/lonsoo/wispr_terminal_professional_respaldo_2026-10-12_conexion/`). Pasos de despliegue
+    en `docs/arquitectura_mvp.md` → CONFIG AWS, punto 8 (Docker, Node 22, `node-pty` se compila en
+    Linux, memoria por contenedor, `WISPR_PUBLIC_HOSTS`).
+  - Probado en Linux con Docker **simulado** y `node-pty` compilado: 30 comprobaciones de punta a
+    punta + UI real en Chromium (registro → Abrir Kali → `ctf submit` → 120 pts) + FastAPI caído +
+    modo de siempre sin cambios. **Falta probarlo con Docker real.**
+
 ## Pendiente (próximos pasos, en orden)
 
 1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
@@ -513,10 +537,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    a) ~~Rotar la contraseña de Gmail de `wispr_terminal_professional/.env.example`~~ Cerrado
       (11 oct): era falsa y ya no se usa. La de `backend/.env` (`wispr.info@gmail.com`) es la real.
    b) ~~Apuntar el frontend a este backend y confirmar que el flujo real funciona con la UI~~
-      ✅ Hecho (7 oct, con Playwright — ver "Progreso técnico"). Falta que el equipo decida
-      **dónde vive de forma permanente** esa URL del backend (hoy el `<meta name="wispr-api">`
-      de `wispr_terminal_professional/index.html` sigue vacío = mismo origen; hay que decidir
-      si ese frontend termina sirviéndose junto al backend en la misma instancia EC2 o separado).
+      ✅ Hecho (7 oct, con Playwright — ver "Progreso técnico"). **Resuelto el 12 oct:** el
+      frontend se sirve desde la misma instancia, detrás del mismo nginx (lo sirve Node), así que el
+      `<meta name="wispr-api">` se queda vacío (= mismo origen). **Queda decidir con el equipo** dónde
+      vive el código de `wispr_terminal_professional`: hoy es una carpeta suelta sin Git, y para
+      desplegarlo en EC2 conviene que esté en un repositorio (recomendado: dentro de este).
 7. ~~Retos, envíos de flags, ranking y progreso de lecciones~~ ✅ Hecho y **verificado contra
    Supabase real** (11 oct) — ver "Progreso técnico". Rama `feature/retos-envios-ranking`.
 7b. ~~Retos Wi-Fi jugables~~ ✅ **Solución temporal hecha (11 oct):** los 8 retos Wi-Fi usan
@@ -533,14 +558,21 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
      flags arruina la medición.
    - **Cuándo NO hace falta:** la demo de EXPOTEC (4 personas, un dispositivo) y las defensas de
      avance: la solución temporal alcanza y no conviene gastar tiempo ahí.
-   - **Por qué Python y no seguir con Node:** el backend es Python; generar en el momento con Node
-     obligaría a correr dos runtimes en el servidor y repartir la "flag correcta" entre dos
-     servicios. La criptografía ya está validada en Python (el test de arriba la usa para resolver);
+   - **Por qué Python y no seguir con Node:** el backend es Python; Node ya corre en el servidor
+     por la terminal (12 oct), pero generar ahí los archivos obligaría a repartir la "flag
+     correcta" entre dos servicios (Node la crearía y FastAPI la valida). La criptografía ya está validada en Python (el test de arriba la usa para resolver);
      falta la parte de *construir* las tramas, ~440 líneas de `pcap-wifi.js` + `pcap-challenges.js`.
      Orden: deauth → PMKID → WPA. La tabla `challenge_instances` y `flag_validator.py` ya están
      listos para esto; frontend y rutas no cambian.
-   Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`. Terminal Kali,
-   S3 + IAM y la instancia EC2 siguen después, como estaba decidido.
+   Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`.
+7d. ~~Conectar la terminal Kali (Node) con FastAPI~~ ✅ Hecho (12 oct) — ver "Progreso técnico".
+   Falta: probarlo con **Docker real** (computadora con Docker Desktop o la EC2) y un ensayo completo
+   de la demo en esa máquina.
+7e. **Análisis de desempeño + dificultad adaptativa (Pandas / scikit-learn).** Es **requisito del
+   proyecto** (sección "Objetivo": analizar el desempeño y adaptar la dificultad) — no se descarta
+   ni se pospone indefinidamente. Los datos ya se guardan: cada envío con hora, acierto y origen
+   web/terminal (`submissions`), primer acierto y puntos (`solves`), intentos y progreso de
+   lecciones (`lesson_progress`).
 8. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
    agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
    Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El

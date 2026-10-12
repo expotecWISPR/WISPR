@@ -112,6 +112,16 @@ def test_resolver_xor_de_punta_a_punta(client):
     assert [(r["handle"], r["score"], r["current"]) for r in ranking] == [("@ana", 120, True), ("@beto", 0, False)]
 
 
+def test_envio_desde_la_terminal_queda_marcado(client):
+    """Node reenvía cada `ctf submit` con source="terminal"; cualquier otro valor cuenta como "web"."""
+    ana = client.tokens["Ana"]
+    client.post("/api/submissions", headers=ana, json={"challengeId": "crypto-xor-01", "flag": "WISPR{nope}", "source": "otra-cosa"})
+    ok = client.post("/api/submissions", headers=ana, json={"challengeId": "crypto-xor-01", "flag": XOR_FLAG, "source": "terminal"})
+    assert ok.json()["ok"] is True and ok.json()["points"] == 120
+    submissions = client.get("/api/players/me", headers=ana).json()["player"]["submissions"]
+    assert [(s["ok"], s["source"]) for s in submissions] == [(True, "terminal"), (False, "web")]
+
+
 def test_no_se_puede_pedir_un_archivo_fuera_del_catalogo(client):
     ana = client.tokens["Ana"]
     for path in ["/api/challenges/crypto-xor-01/files/..%2F..%2F.env",

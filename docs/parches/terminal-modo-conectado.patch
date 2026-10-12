@@ -1,0 +1,431 @@
+--- a/server.js
++++ b/server.js
+@@ -63,6 +63,35 @@
+ const DOCKER_BIN = process.platform === "win32" ? "docker.exe" : "docker";
+ 
+ // ---------------------------------------------------------------------------
++// Modo conectado (12 oct 2026): con WISPR_BACKEND_URL (p. ej.
++// http://127.0.0.1:8000) este servidor atiende SOLO la terminal Kali y los
++// archivos del frontend; cuentas, retos, flags y ranking son del backend
++// FastAPI (repo WISPR, base de datos Supabase). En el servidor, nginx manda a
++// Node /ws/terminal y las rutas de TERMINAL_API, y el resto de /api/ directo a
++// FastAPI. Sin la variable, el prototipo funciona solo, como antes.
++// ---------------------------------------------------------------------------
++const BACKEND_URL = String(process.env.WISPR_BACKEND_URL || "").trim().replace(/\/+$/, "");
++const CONNECTED = Boolean(BACKEND_URL);
++if (CONNECTED && !/^http:\/\/[^/?#]+$/.test(BACKEND_URL)) {
++  // FastAPI corre en la misma máquina: solo esquema + host + puerto, sin ruta.
++  console.error("WISPR_BACKEND_URL inválida. Ejemplo: http://127.0.0.1:8000");
++  process.exit(1);
++}
++const TERMINAL_API = new Set([
++  "/api/platform/status", "/api/challenges/active",
++  "/api/kali/start", "/api/kali/stop", "/api/kali/status", "/api/kali/diagnose"
++]);
++// Detrás de nginx el navegador manda Origin con el dominio o la IP pública
++// (p. ej. "wispr.ejemplo.com"); hay que agregarlo aquí o se rechaza (403).
++for (const host of String(process.env.WISPR_PUBLIC_HOSTS || "").split(",")) {
++  if (host.trim()) ALLOWED_HOSTS.add(host.trim().toLowerCase());
++}
++// Cada cuánto se vuelve a preguntar a FastAPI si la sesión de una terminal
++// abierta sigue valiendo (logout, cuenta bloqueada o vencida -> se cierra).
++const SESSION_RECHECK_MS = Number(process.env.SESSION_RECHECK_SECONDS || 60) * 1000;
++const backendTitles = new Map(); // challengeId -> título, para el resultado de `ctf submit`
++
++// ---------------------------------------------------------------------------
+ // Verificación de correo institucional (MFA de registro): el dominio decide
+ // el rol y un código de un solo uso confirma que el correo existe de verdad.
+ // ---------------------------------------------------------------------------
+@@ -260,6 +289,144 @@
+ ]);
+ 
+ // ---------------------------------------------------------------------------
++// Modo conectado: FastAPI decide quién es el jugador y valida las flags.
++// ---------------------------------------------------------------------------
++function backendFetch(pathname, token, options = {}) {
++  const headers = { ...(options.headers || {}) };
++  if (token) headers.Authorization = `Bearer ${token}`;
++  return fetch(BACKEND_URL + pathname, { ...options, headers, signal: AbortSignal.timeout(10000) });
++}
++
++// FastAPI identifica a cada usuario con un número (users.id), pero aquí el id
++// nombra contenedores y carpetas, y playerId() exige 16-80 caracteres hex. Se
++// deriva uno estable: el mismo usuario siempre cae en el mismo laboratorio.
++function localPlayerId(backendId) {
++  return crypto.createHash("sha256").update(`wispr-backend-user:${backendId}`).digest("hex").slice(0, 32);
++}
++
++// Pregunta a FastAPI (GET /api/players/me) de quién es el token. Devuelve
++// { id, role }, null si la sesión no vale (vencida, cerrada o cuenta
++// bloqueada), o lanza un error si FastAPI no responde.
++async function backendSession(token) {
++  if (!token || typeof token !== "string" || token.length > 128) return null;
++  const response = await backendFetch("/api/players/me", token);
++  if (response.status === 401) return null;
++  if (!response.ok) throw new Error(`FastAPI respondió ${response.status} a /api/players/me`);
++  const data = await response.json();
++  if (!data || !data.ok || !data.player || !data.player.playerId) return null;
++  return { id: localPlayerId(data.player.playerId), role: String(data.player.role || "") };
++}
++
++// `ctf submit`: la flag la valida FastAPI con la misma regla y los mismos
++// puntos que un envío desde la web. Va con el token del propio jugador, así
++// FastAPI sabe quién es sin confiar en nada que diga este servidor.
++async function forwardSubmission(token, record) {
++  const challengeId = String(record.challengeId || "").slice(0, 120);
++  try {
++    const response = await backendFetch("/api/submissions", token, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ challengeId, flag: String(record.flag || "").slice(0, 512), source: "terminal" })
++    });
++    if (response.status === 401) return { ok: false, challengeId, error: "Tu sesión expiró. Inicia sesión de nuevo en la web." };
++    const data = await response.json();
++    return data && typeof data === "object" ? data : { ok: false, challengeId, error: "Respuesta inválida del servidor." };
++  } catch (error) {
++    console.error("[ctf submit] FastAPI no responde:", error.message);
++    return { ok: false, challengeId, error: "No se pudo contactar al servidor de WISPR. Intenta de nuevo." };
++  }
++}
++
++// Monta en el workspace del jugador el reto tal como lo tiene FastAPI: los
++// MISMOS archivos que se descargan desde la web (fijos por ahora, ver
++// CLAUDE.md del repo WISPR, punto 7c), así la flag que valida FastAPI coincide.
++// Devuelve null si el reto no existe.
++async function prepareWorkspaceFromBackend(player, token, challengeId) {
++  const catalogResponse = await backendFetch("/api/challenges");
++  if (!catalogResponse.ok) throw new Error(`catálogo: FastAPI respondió ${catalogResponse.status}`);
++  const catalog = await catalogResponse.json();
++  const challenge = (catalog.challenges || []).find(item => item.id === String(challengeId || ""));
++  if (!challenge) return null;
++  backendTitles.set(challenge.id, challenge.title);
++  // Primero se bajan todos los archivos; recién después se reemplaza la
++  // carpeta, para no dejarla a medias si una descarga falla.
++  const files = [];
++  for (const file of challenge.files || []) {
++    const response = await backendFetch(`/api/challenges/${encodeURIComponent(challenge.id)}/files/${encodeURIComponent(file.name)}`, token);
++    if (!response.ok) throw new Error(`${file.name}: FastAPI respondió ${response.status}`);
++    files.push({ name: safeFileName(file.name), type: file.type || "file", desc: file.desc || "", data: Buffer.from(await response.arrayBuffer()) });
++  }
++  const environment = environmentFor(player);
++  const challengeDir = path.join(environment.workspace, "challenge");
++  fs.mkdirSync(environment.workspace, { recursive: true });
++  fs.rmSync(challengeDir, { recursive: true, force: true });
++  fs.mkdirSync(challengeDir, { recursive: true });
++  for (const file of files) fs.writeFileSync(path.join(challengeDir, file.name), file.data);
++  const publicFiles = files.map(({ name, type, desc }) => ({ name, type, desc }));
++  fs.writeFileSync(path.join(challengeDir, "README.md"), backendReadme(challenge, publicFiles), "utf8");
++  const active = {
++    ...challenge,
++    objective: challenge.objective || challenge.description || "",
++    files: publicFiles,
++    directory: "/workspace/challenge",
++    sharedEvidence: true, // `ctf show` no dice "única para tu cuenta"
++    activatedAt: new Date().toISOString()
++  };
++  fs.writeFileSync(path.join(environment.workspace, "active.json"), JSON.stringify(active, null, 2), "utf8");
++  const submissions = path.join(environment.workspace, "submissions.ndjson");
++  if (!fs.existsSync(submissions)) fs.writeFileSync(submissions, "", "utf8");
++  return active;
++}
++
++function backendReadme(challenge, files) {
++  return [
++    `# ${challenge.title}`,
++    "",
++    `Nivel ${challenge.difficulty} · ${challenge.points} pts · ${challenge.category}`,
++    "",
++    challenge.description || "",
++    "",
++    "## Objetivo",
++    challenge.objective || "",
++    "",
++    "## Archivos",
++    files.map(file => `- \`${file.name}\`${file.desc ? ` — ${file.desc}` : ""}`).join("\n"),
++    "",
++    "## Herramientas sugeridas",
++    (challenge.tools || []).map(tool => `- ${tool}`).join("\n") || "- Lee los archivos del reto.",
++    "",
++    "Pistas: `ctf hint`. Cuando tengas la flag:",
++    "```bash",
++    "ctf submit WISPR{tu_flag}",
++    "```",
++    "",
++    "Evidencia sintética y sin conexión: no uses estas técnicas contra redes o equipos sin permiso."
++  ].join("\n");
++}
++
++// Solo para probar en una computadora sin nginx (p. ej. Windows con Docker
++// Desktop): las rutas /api/* que no son de la terminal se reenvían a FastAPI y
++// basta abrir http://127.0.0.1:8787. En el servidor, nginx las manda directo a
++// FastAPI y esto no se usa. El destino se arma con url.pathname (ya analizado),
++// nunca con req.url crudo: un "//otro-host/..." no puede desviar la petición.
++function proxyToBackend(req, res, url) {
++  const target = new URL(BACKEND_URL + url.pathname + url.search);
++  const forwardedFor = [req.headers["x-forwarded-for"], req.socket.remoteAddress].filter(Boolean).join(", ");
++  const upstream = http.request(target, {
++    method: req.method,
++    headers: { ...req.headers, host: target.host, "x-forwarded-for": forwardedFor }
++  }, response => {
++    res.writeHead(response.statusCode || 502, response.headers);
++    response.pipe(res);
++  });
++  upstream.on("error", () => {
++    if (res.headersSent) return res.destroy();
++    sendJson(res, 502, { ok: false, error: "El backend de WISPR (FastAPI) no responde." });
++  });
++  req.pipe(upstream);
++}
++
++// ---------------------------------------------------------------------------
+ // Progreso de Teoría (lecciones y misiones). El cliente reporta el resultado
+ // al terminar; el servidor valida rangos y conserva el MEJOR intento.
+ // ---------------------------------------------------------------------------
+@@ -1198,7 +1365,8 @@
+   await run(DOCKER_BIN, ["stop", environment.target], { timeout: 15000 }).catch(() => {});
+ }
+ 
+-async function readTerminalSubmissions(player, cursor) {
++// `token` solo se usa en modo conectado (para reenviar cada envío a FastAPI).
++async function readTerminalSubmissions(player, cursor, token) {
+   const environment = environmentFor(player);
+   const file = path.join(environment.workspace, "submissions.ndjson");
+   if (!fs.existsSync(file)) return { cursor: 0, submissions: [] };
+@@ -1212,7 +1380,9 @@
+     let fresh = false;
+     if (!terminalSubmissionResults.has(key)) {
+       fresh = true;
+-      terminalSubmissionResults.set(key, verifySubmission(player, record.challengeId, record.flag, "terminal"));
++      terminalSubmissionResults.set(key, CONNECTED
++        ? forwardSubmission(token, record)
++        : verifySubmission(player, record.challengeId, record.flag, "terminal"));
+     }
+     const result = await terminalSubmissionResults.get(key);
+     if (fresh) writeTerminalResult(environment, record, result);
+@@ -1227,7 +1397,7 @@
+   const line = JSON.stringify({
+     id: record.id,
+     challengeId: result.challengeId || record.challengeId,
+-    title: challenge ? challenge.title : "",
++    title: challenge ? challenge.title : (backendTitles.get(result.challengeId || record.challengeId) || ""),
+     ok: Boolean(result.ok),
+     duplicate: Boolean(result.duplicate),
+     points: result.points || 0,
+@@ -1247,7 +1417,7 @@
+   "X-Content-Type-Options": "nosniff",
+   "Referrer-Policy": "no-referrer",
+   "Cross-Origin-Opener-Policy": "same-origin",
+-  "Content-Security-Policy": "default-src 'self'; connect-src 'self' ws:; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; base-uri 'none'; frame-ancestors 'none'"
++  "Content-Security-Policy": "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+ };
+ 
+ function sendJson(res, status, payload) {
+@@ -1322,7 +1492,11 @@
+ function isAllowedOrigin(req) {
+   const origin = req.headers.origin;
+   if (!origin) return true;
+-  try { return ALLOWED_HOSTS.has(new URL(origin).host); } catch { return false; }
++  let host;
++  try { host = new URL(origin).host; } catch { return false; }
++  if (ALLOWED_HOSTS.has(host)) return true;
++  console.warn(`[origen] rechazado: ${host}. Si es la dirección pública de WISPR, agrégala a WISPR_PUBLIC_HOSTS.`);
++  return false;
+ }
+ 
+ function serveVendor(res, pathname) {
+@@ -1372,11 +1546,26 @@
+   try { url = new URL(req.url, `http://${HOST}:${PORT}`); } catch { return sendJson(res, 400, { ok: false, error: "Solicitud inválida." }); }
+   if (req.method === "OPTIONS") return sendJson(res, 200, { ok: true });
+ 
++  // Modo conectado: todo /api/* que no es de la terminal lo atiende FastAPI.
++  if (CONNECTED && url.pathname.startsWith("/api/") && !TERMINAL_API.has(url.pathname)) return proxyToBackend(req, res, url);
++
+   // Todo /api/* fuera de PUBLIC_API exige una sesión válida. El playerId de la
+   // sesión reemplaza al que venga en la URL o en el cuerpo (ver parseJson), así
+   // que los handlers de abajo nunca confían en lo que diga el navegador.
+   if (url.pathname.startsWith("/api/") && !PUBLIC_API.has(url.pathname)) {
+-    const sessionPlayer = resolveSession(bearerToken(req));
++    let sessionPlayer = null;
++    if (CONNECTED) {
++      try {
++        const session = await backendSession(bearerToken(req));
++        sessionPlayer = session && session.id;
++        req.sessionRole = session ? session.role : "";
++      } catch (error) {
++        console.error("[sesión] FastAPI no responde:", error.message);
++        return sendJson(res, 503, { ok: false, error: "El servidor de cuentas de WISPR no responde. Intenta en un momento." });
++      }
++    } else {
++      sessionPlayer = resolveSession(bearerToken(req));
++    }
+     if (!sessionPlayer) return sendJson(res, 401, { ok: false, auth: "required", error: "Tu sesión expiró o no es válida. Inicia sesión de nuevo." });
+     req.sessionPlayerId = sessionPlayer;
+     url.searchParams.set("playerId", sessionPlayer);
+@@ -1746,23 +1935,34 @@
+       return sendJson(res, 429, { ok: false, error: "Espera unos segundos antes de volver a diagnosticar." });
+     }
+     diagnoseLastRun.set(player, now);
+-    const full = isAdminPlayer(registry.players[req.sessionPlayerId]);
++    const full = CONNECTED ? req.sessionRole === "admin" : isAdminPlayer(registry.players[req.sessionPlayerId]);
+     res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+     return res.end(await diagnose(player, { full }));
+   }
+   if (url.pathname === "/api/challenges/active" && req.method === "POST") {
+     const body = await parseJson(req);
+     const player = playerId(body.playerId);
+-    const challenge = challengeRegistry.get(String(body.challengeId || ""));
+-    if (!player || !challenge) return sendJson(res, 400, { ok: false, error: "Reto o sesión inválidos." });
+     // Montar el reto = escribir su evidencia + active.json en el workspace. Esto
+-    // es lo único imprescindible para resolverlo en la terminal.
++    // es lo único imprescindible para resolverlo en la terminal. En modo
++    // conectado el reto y sus archivos vienen de FastAPI.
++    let challenge = CONNECTED ? null : challengeRegistry.get(String(body.challengeId || ""));
+     let active;
+-    try {
+-      active = preparePlayerWorkspace(player, challenge);
+-    } catch (error) {
+-      console.error("[lab] preparar workspace:", error.message);
+-      return sendJson(res, 500, { ok: false, error: "No se pudo preparar la evidencia del reto." });
++    if (CONNECTED && player) {
++      try {
++        challenge = active = await prepareWorkspaceFromBackend(player, bearerToken(req), body.challengeId);
++      } catch (error) {
++        console.error("[lab] preparar workspace desde FastAPI:", error.message);
++        return sendJson(res, 502, { ok: false, error: "No se pudo preparar la evidencia del reto." });
++      }
++    }
++    if (!player || !challenge) return sendJson(res, 400, { ok: false, error: "Reto o sesión inválidos." });
++    if (!CONNECTED) {
++      try {
++        active = preparePlayerWorkspace(player, challenge);
++      } catch (error) {
++        console.error("[lab] preparar workspace:", error.message);
++        return sendJson(res, 500, { ok: false, error: "No se pudo preparar la evidencia del reto." });
++      }
+     }
+     // Asegura el contenedor Kali con un montaje /workspace sano (auto-repara si
+     // quedó obsoleto), para que `ctf show` encuentre active.json de inmediato.
+@@ -1835,14 +2035,30 @@
+ server.on("upgrade", async (req, socket, head) => {
+   let url;
+   try { url = new URL(req.url, `http://${HOST}:${PORT}`); } catch { socket.destroy(); return; }
++  if (url.pathname !== "/ws/terminal" || !isLocalRequest(req) || !isAllowedOrigin(req) || wss.clients.size >= MAX_COMMAND_SESSIONS) {
++    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n"); socket.destroy(); return;
++  }
+   // El navegador no puede mandar cabeceras en un WebSocket: el token va en ?token=.
+-  const player = resolveSession(url.searchParams.get("token"));
+-  if (url.pathname !== "/ws/terminal" || !player || !isLocalRequest(req) || !isAllowedOrigin(req) || wss.clients.size >= MAX_COMMAND_SESSIONS) {
++  const token = url.searchParams.get("token");
++  let player = null;
++  if (CONNECTED) {
++    // FastAPI ya rechaza sesiones vencidas, cerradas o de cuentas bloqueadas.
++    try {
++      const session = await backendSession(token);
++      player = session && session.id;
++    } catch (error) {
++      console.error("[ws] FastAPI no responde:", error.message);
++      socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n"); socket.destroy(); return;
++    }
++  } else {
++    player = resolveSession(token);
++  }
++  if (!player) {
+     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n"); socket.destroy(); return;
+   }
+   // Una cuenta bloqueada (manual o automática) no puede abrir terminal, aunque
+   // conserve una sesión en el navegador.
+-  if (isAccountLocked(registry.players[player])) {
++  if (!CONNECTED && isAccountLocked(registry.players[player])) {
+     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n"); socket.destroy(); return;
+   }
+   const ready = await ensureLabEnvironment(player);
+@@ -1850,10 +2066,10 @@
+     console.error("[ws] laboratorio no listo:", ready.error);
+     socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n"); socket.destroy(); return;
+   }
+-  wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req, player));
++  wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req, player, token));
+ });
+ 
+-wss.on("connection", (ws, _req, player) => {
++wss.on("connection", (ws, _req, player, token) => {
+   ws._playerId = player; // para poder cerrar las sesiones de una cuenta al bloquearla
+   const environment = environmentFor(player);
+   // El proceso `docker` corre en el HOST: necesita el entorno real del host (PATH, USERPROFILE,
+@@ -1889,7 +2105,7 @@
+     if (checking || ws.readyState !== ws.OPEN) return;
+     checking = true;
+     try {
+-      const { cursor: next, submissions } = await readTerminalSubmissions(player, cursor);
++      const { cursor: next, submissions } = await readTerminalSubmissions(player, cursor, token);
+       cursor = next;
+       submissions.forEach(result => send({ type: "submission", result }));
+     } catch (error) {
+@@ -1898,13 +2114,22 @@
+       checking = false;
+     }
+   }, 1500);
++  // Modo conectado: si la sesión deja de valer en FastAPI (logout, cuenta
++  // bloqueada o vencida), la terminal abierta se cierra en la siguiente vuelta.
++  const sessionCheck = CONNECTED ? setInterval(async () => {
++    try {
++      if (await backendSession(token)) return;
++      send({ type: "error", error: "Tu sesión terminó. Inicia sesión de nuevo para usar la terminal." });
++      ws.close(4401, "sesion terminada");
++    } catch { /* FastAPI no responde: se vuelve a intentar en la próxima vuelta */ }
++  }, SESSION_RECHECK_MS) : null;
+   ws.on("message", raw => {
+     let message;
+     try { message = JSON.parse(String(raw)); } catch { return; }
+     if (message.type === "input" && typeof message.data === "string" && message.data.length <= 16384) shell.write(message.data);
+     if (message.type === "resize") shell.resize(Math.max(20, Math.min(400, Number(message.cols) || 100)), Math.max(5, Math.min(200, Number(message.rows) || 30)));
+   });
+-  const close = () => { clearInterval(watcher); try { shell.kill(); } catch {} };
++  const close = () => { clearInterval(watcher); clearInterval(sessionCheck); try { shell.kill(); } catch {} };
+   ws.on("close", close);
+   ws.on("error", close);
+ });
+@@ -1921,5 +2146,7 @@
+ server.listen(PORT, HOST, () => {
+   console.log(`WISPR CTF: http://${HOST}:${PORT}`);
+   console.log("Terminal: browser → WebSocket → per-player Docker Kali container on an internal network.");
+-  console.log(`Registro de datos: ${REGISTRY_FILE} (${Object.keys(registry.players).length} jugadores)`);
++  console.log(CONNECTED
++    ? `Modo conectado: cuentas, retos y flags en el backend FastAPI (${BACKEND_URL}).`
++    : `Registro de datos: ${REGISTRY_FILE} (${Object.keys(registry.players).length} jugadores)`);
+ });
+--- a/kali/ctf
++++ b/kali/ctf
+@@ -120,9 +120,12 @@
+         print(wrap_block(", ".join(tools), width, indent="  ",
+                          first_indent=f"{BOLD}Herramientas{RESET}  "))
+     print()
+-    print(f"{YELLOW}" + wrap_block(
+-        "Esta evidencia es única para tu cuenta; la flag no coincide con la "
+-        "de otros jugadores.", width) + f"{RESET}")
++    # Con el backend FastAPI, la evidencia es la misma para todos por ahora
++    # (archivos fijos): no se promete una flag personal.
++    if not challenge.get("sharedEvidence"):
++        print(f"{YELLOW}" + wrap_block(
++            "Esta evidencia es única para tu cuenta; la flag no coincide con la "
++            "de otros jugadores.", width) + f"{RESET}")
+     print(wrap_block("Usa 'ctf hint' para una pista y 'cat "
+                      "challenge/README.md' para el paso a paso.", width))
+ 
+--- a/.env.example
++++ b/.env.example
+@@ -28,3 +28,14 @@
+ # Sesiones (opcional): vencimiento por inactividad y antigüedad máxima del token.
+ # SESSION_IDLE_HOURS=12
+ # SESSION_MAX_DAYS=7
++
++# --- Modo conectado con el backend FastAPI (repo WISPR) ---
++# Con esta variable, este servidor atiende SOLO la terminal Kali y los archivos
++# del frontend; cuentas, retos, flags y ranking los maneja FastAPI (Supabase).
++# Sin ella, el prototipo funciona solo, como antes (lab/data/*.json).
++# WISPR_BACKEND_URL=http://127.0.0.1:8000
++# Dirección pública con la que se abre WISPR detrás de nginx (dominio o IP,
++# separadas por coma). Sin esto, el navegador recibe 403 al abrir la terminal.
++# WISPR_PUBLIC_HOSTS=wispr.ejemplo.com
++# Cada cuántos segundos se revisa que la sesión de una terminal abierta siga valiendo.
++# SESSION_RECHECK_SECONDS=60

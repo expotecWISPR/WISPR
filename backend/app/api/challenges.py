@@ -11,9 +11,14 @@ El frontend todavía manda `playerId` en el cuerpo o la URL: se ignora a
 propósito. El jugador sale SIEMPRE de la sesión (`get_current_player`), así
 nadie puede enviar flags o ver datos a nombre de otro.
 
-Fuera de alcance por ahora (decidido 7 oct): la terminal Kali. Por eso
-`/challenges/active` no arranca contenedores y `/platform/status` informa
-Docker como no disponible.
+La terminal Kali la atiende el servidor Node del prototipo en "modo
+conectado" (12 oct): nginx le manda `/ws/terminal`, `/api/kali/*`,
+`/challenges/active` y `/platform/status`. Node pregunta a este backend de
+quién es cada token (`/api/players/me`) y le reenvía los `ctf submit` a
+`POST /submissions` con `source: "terminal"`. Las versiones de
+`/challenges/active` y `/platform/status` de acá solo se usan si no hay Node
+(sin terminal): no arrancan contenedores e informan Docker como no disponible.
+Configuración en docs/arquitectura_mvp.md (CONFIG AWS) y deploy/nginx/.
 """
 
 from __future__ import annotations
@@ -83,7 +88,11 @@ async def submit(request: Request, db: Session = Depends(get_db), player: User =
     # y frenan a un script que pruebe flags en masa.
     rate_limit.check("submissions", str(player.id), limit=30, window_seconds=60)
     body = await _json_body(request)
-    return scoring.submit_flag(db, player, body.get("challengeId"), body.get("flag"), source="web")
+    # "terminal" lo manda Node al reenviar un `ctf submit`. Es solo una
+    # etiqueta para el historial: no cambia la validación ni los puntos, así
+    # que no importa que un cliente la pueda poner a mano.
+    source = "terminal" if body.get("source") == "terminal" else "web"
+    return scoring.submit_flag(db, player, body.get("challengeId"), body.get("flag"), source=source)
 
 
 @router.get("/submissions")

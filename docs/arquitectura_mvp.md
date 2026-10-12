@@ -185,9 +185,17 @@ un `t3.large` es un cambio de una sola línea en la configuración de AWS, sin r
 
 # CONFIG AWS
 
-Lista de pasos concretos para que el backend (FastAPI) funcione en la instancia EC2. Revisado contra
-el código real el 11 oct 2026. Los marcados 🔴 hacen que el backend **no arranque o no funcione**
-si se omiten; los 🟡 son de **seguridad** y son obligatorios antes de abrirlo al público.
+Lista de pasos concretos para que WISPR funcione en la instancia EC2. Revisado contra el código real
+el 11 oct 2026; el punto 8 (terminal Kali) se agregó el 12 oct. Los marcados 🔴 hacen que WISPR
+**no arranque o no funcione** si se omiten; los 🟡 son de **seguridad** y son obligatorios antes de
+abrirlo al público.
+
+Cómo quedan las piezas en la misma instancia (todo detrás de nginx, un solo dominio):
+
+```
+navegador ──HTTPS──> nginx ──┬─> FastAPI  127.0.0.1:8000   cuentas, retos, flags, ranking (Supabase)
+                             └─> Node     127.0.0.1:8787   frontend + terminal Kali ──> Docker
+```
 
 ### 🔴 1. `DATABASE_URL`: usar el *Session pooler* de Supabase, no la conexión directa
 
@@ -239,21 +247,76 @@ MFA). Implementado en `app/services/email.py::_fallback` y probado en `tests/uni
 
 ### 🟡 5. HTTPS con nginx
 
-Los tokens de sesión viajan en la cabecera `Authorization`: sin HTTPS se pueden robar. nginx
-termina TLS (certificado de Let's Encrypt con `certbot`, requiere un dominio apuntando a la IP
-elástica) y reenvía a `127.0.0.1:8000`. El WebSocket de la terminal, cuando exista, va por `wss://`.
+Los tokens de sesión viajan en la cabecera `Authorization` (y en la URL del WebSocket de la
+terminal): sin HTTPS se pueden robar. La configuración de nginx ya está escrita en
+**`deploy/nginx/wispr.conf`** (reparte las rutas entre FastAPI y Node, WebSocket incluido, y no
+guarda en el log la URL de la terminal porque lleva el token). Copiarla a
+`/etc/nginx/conf.d/wispr.conf`, cambiar `server_name`, `sudo nginx -t` y
+`sudo systemctl reload nginx`. Después, `sudo certbot --nginx -d <dominio>` (requiere un dominio
+apuntando a la IP elástica) agrega el certificado y el bloque 443. Con HTTPS, la terminal va sola
+por `wss://` (el frontend lo decide según la página).
+
+Revisado el 12 oct con `crossplane` (el analizador de configuraciones de nginx): sin errores. No
+reemplaza a `sudo nginx -t` en el servidor.
 
 ### 🟡 6. Restringir CORS
 
 En el `.env` del servidor: `CORS_ORIGINS=https://<dominio-del-frontend>` (varios separados por
 coma). El valor por defecto `*` es solo para desarrollo. Probado el 12 oct: un origen no permitido
-recibe 400 en el preflight.
+recibe 400 en el preflight. (Con el frontend servido por el mismo nginx, el navegador ni siquiera
+necesita CORS; restringirlo igual cierra la puerta a otros sitios.)
 
 ### 🟡 7. HSTS en nginx
 
-En el bloque `server` de HTTPS: `add_header Strict-Transport-Security "max-age=31536000" always;`
-— obliga al navegador a usar siempre HTTPS. Las demás cabeceras de seguridad (nosniff, DENY,
-no-referrer, CSP de la API) ya las pone el backend.
+Descomentar en `deploy/nginx/wispr.conf` (bloque HTTPS que crea certbot):
+`add_header Strict-Transport-Security "max-age=31536000" always;` — obliga al navegador a usar
+siempre HTTPS. Las demás cabeceras de seguridad (nosniff, DENY, no-referrer, CSP de la API) ya las
+pone el backend.
+
+### 🔴 8. Terminal Kali: Node en "modo conectado" + Docker
+
+La terminal sigue en el servidor Node del prototipo (`wispr_terminal_professional/server.js`), pero
+ya no tiene cuentas propias: con `WISPR_BACKEND_URL` le pregunta a FastAPI de quién es cada token
+(`/api/players/me`) y le reenvía las flags de `ctf submit` (`POST /api/submissions`,
+`source: "terminal"`). Los archivos del reto los baja de FastAPI, así que son los mismos de la web
+y la flag coincide. Parche y detalle: `docs/parches/terminal-modo-conectado.patch` y `LEEME.md`.
+
+1. **Docker Engine** en la instancia (`sudo apt install -y docker.io` en Ubuntu) y el usuario que
+   corre Node en el grupo `docker`. Ojo: ese grupo equivale a root en la máquina, por eso Node
+   escucha solo en `127.0.0.1` y nadie más que nginx le habla.
+2. **Node 20 o más nuevo** (el `apt` de Ubuntu 24.04 trae el 18, que no sirve): instalar Node 22 LTS
+   desde NodeSource. Y las herramientas para compilar `node-pty`:
+   `sudo apt install -y build-essential python3`. Después `npm ci` en la carpeta del prototipo.
+   (`node-pty` no trae binario para Linux: se compila al instalar. Probado el 12 oct en Linux:
+   compila y abre una terminal real.)
+3. **`.env` de la carpeta del prototipo:**
+   ```
+   WISPR_BACKEND_URL=http://127.0.0.1:8000
+   WISPR_PUBLIC_HOSTS=<dominio o IP pública>   # el mismo de server_name; sin esto, 403 al abrir Kali
+   KALI_MEMORY=768m                            # por defecto 2g: ver el punto 5
+   MAX_LAB_ENVIRONMENTS=4
+   ```
+   No hace falta SMTP ahí: los correos los manda FastAPI.
+4. **Imágenes Docker** (la primera vez tardan varios minutos; mejor dejarlas hechas antes de la
+   demo), desde la carpeta del prototipo:
+   ```bash
+   docker build -t wispr-ctf-kali:local -f kali/Dockerfile .
+   docker build -t wispr-ctf-target:local -f kali/target/Dockerfile kali/target
+   ```
+   Si la imagen Kali ya existía de antes del 12 oct, reconstruirla: el comando `ctf` cambió.
+5. **Memoria:** cada laboratorio es un contenedor Kali con límite `KALI_MEMORY` (2 GB por defecto)
+   más un objetivo de 128 MB, hasta `MAX_LAB_ENVIRONMENTS` a la vez (8 por defecto). Con los valores
+   por defecto, 8 laboratorios podrían pedir ~17 GB y un `t3.medium` tiene 4 GB. Ajustar los dos
+   valores a la RAM real de la instancia y medir con `docker stats` en un ensayo.
+6. **Arrancar:** `node server.js` (debe quedar corriendo igual que uvicorn; lo ideal es un servicio
+   de `systemd` para cada uno, que los reinicie solos).
+7. **Security Group:** abiertos solo 80/443 (y 22 restringido a la IP del equipo). Los puertos 8000
+   y 8787 **nunca** se abren: solo nginx habla con FastAPI y con Node.
+
+Probado el 12 oct en Linux, con un Docker simulado: registro → activar reto → terminal real →
+`ctf submit` → puntos en la web y en el ranking; token falso o de otro sitio → 403; logout → la
+terminal abierta se cierra sola; FastAPI caído → Node responde 503 y no abre la terminal. **Falta
+probarlo con Docker de verdad** (la computadora con Docker Desktop o la propia EC2).
 
 ### ✅ Ya resuelto en el código (12 oct)
 
@@ -268,7 +331,7 @@ registro, cabeceras de seguridad. Detalle en `docs/pruebas_seguridad.md`.
 - **Correo:** Gmail por el puerto 587 funciona desde EC2 (AWS solo restringe el puerto 25).
 - **Archivos de retos generados:** se guardan en `challenges/generated/` local — válido con una sola
   instancia. Pasar a S3 es un paso posterior (punto 9 del plan en `CLAUDE.md`).
-- **Node.js:** el backend no lo necesita. Solo lo usan el frontend prototipo y la terminal Kali.
-  Los archivos de los retos Wi-Fi (`challenges/static/`) ya vienen generados en el repositorio.
+- **Node.js:** FastAPI no lo necesita; la instancia sí, para el frontend y la terminal Kali (punto
+  8). Los archivos de los retos Wi-Fi (`challenges/static/`) ya vienen generados en el repositorio.
 - **Supabase pausado:** si la base de datos da `could not translate host name`, reactivar el
   proyecto en supabase.com antes de asumir que algo del servidor está mal.
