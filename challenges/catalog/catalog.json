@@ -16,7 +16,7 @@
       "difficulty": "Foundation",
       "points": 120,
       "description": "Una captura corta registra tramas de desautenticación contra una red Wi-Fi.",
-      "objective": "Abre la captura con tshark/Wireshark, filtra las tramas de management y averigua qué AP está siendo atacado.",
+      "objective": "Abre la captura con tshark/Wireshark, filtra las tramas de management y averigua qué AP está siendo atacado. Formato de la flag: WISPR{deauth_<BSSID sin ':'>}, por ejemplo WISPR{deauth_0a1b2c3d4e5f}.",
       "flag": "WISPR{deauth_027472e4b51c}",
       "tools": [
         "wireshark",
@@ -24,7 +24,8 @@
       ],
       "hints": [
         "Las tramas deauth son management (subtipo 0x0c).",
-        "La víctima es el BSSID que recibe MÁS deauth."
+        "La víctima es el BSSID que más APARECE en las tramas deauth (cuéntalos por BSSID).",
+        "aircrack-ng te dice qué redes hay en la captura, pero no cuál está bajo ataque."
       ],
       "files": [
         {
@@ -137,7 +138,7 @@
       "difficulty": "Medium",
       "points": 200,
       "description": "Una captura registra una ráfaga de desautenticaciones contra la red.",
-      "objective": "Analiza las tramas de management y atribuye el ataque: ¿qué AP es la víctima?",
+      "objective": "Analiza las tramas de management y atribuye el ataque: ¿qué AP es la víctima? Formato de la flag: WISPR{deauth_<BSSID sin ':'>}.",
       "flag": "WISPR{deauth_02dcbe98be9c}",
       "tools": [
         "wireshark",
@@ -145,7 +146,8 @@
       ],
       "hints": [
         "Las tramas deauth son management subtipo 0x0c.",
-        "La víctima es el BSSID que recibe MÁS deauth."
+        "La víctima es el BSSID que más APARECE en las tramas deauth (cuéntalos por BSSID).",
+        "aircrack-ng te dice qué redes hay en la captura, pero no cuál está bajo ataque."
       ],
       "files": [
         {
