@@ -292,10 +292,10 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   (este archivo y `.claude/memory/`). **Decisión del mismo día:** el fine-tuning con LoRA queda
   en pausa (se está resolviendo por separado); mientras tanto `ai_advisor.py` sigue con
   **prompting simple** contra el modelo base de Together AI, sin bloquear el resto del pipeline.
-* Política de equipo (26 ago, documentada solo en la rama de Persona 2 hasta esta fusión):
-  nadie commitea directo a `main`, cada persona trabaja en su rama `feature/<algo>` y junta con
-  Pull Request. No se cumplió entre el 26 ago y el 7 oct por esto mismo — vale la pena
-  re-confirmarla con el equipo ahora que ya está visible para ambos en `main`.
+* **Ramas: ya no se usan (12 oct).** La política del 26 ago (ramas `feature/<algo>` + Pull
+  Request, nadie commitea directo a `main`) se dejó: el backend lo lleva una sola persona y el
+  frontend vive en su propio repositorio (`WISPR-frontend`, ver pendiente 6b). Se commitea
+  directo a `main`.
 * Versión de Python para el venv del backend: **3.12, 3.13 o 3.14** sirven, en Windows y Linux.
   **Verificado el 12 oct con `uv pip compile --only-binary :all:`** (simula la instalación en cada
   plataforma sin compilar nada) para las 6 combinaciones. Corrección: el 11 oct se dijo lo mismo
@@ -539,9 +539,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    b) ~~Apuntar el frontend a este backend y confirmar que el flujo real funciona con la UI~~
       ✅ Hecho (7 oct, con Playwright — ver "Progreso técnico"). **Resuelto el 12 oct:** el
       frontend se sirve desde la misma instancia, detrás del mismo nginx (lo sirve Node), así que el
-      `<meta name="wispr-api">` se queda vacío (= mismo origen). **Queda decidir con el equipo** dónde
-      vive el código de `wispr_terminal_professional`: hoy es una carpeta suelta sin Git, y para
-      desplegarlo en EC2 conviene que esté en un repositorio (recomendado: dentro de este).
+      `<meta name="wispr-api">` se queda vacío (= mismo origen). **Resuelto el 12 oct:** el código
+      de `wispr_terminal_professional` (frontend + servidor Node de la terminal Kali, ya con los
+      parches de `docs/parches/` aplicados) vive ahora en su **propio repositorio, `WISPR-frontend`**
+      (separado de este, no dentro). Para correrlo en local: su `.env` con
+      `WISPR_BACKEND_URL=http://127.0.0.1:<puerto de FastAPI>`, `npm ci` y `node server.js` (8787).
 7. ~~Retos, envíos de flags, ranking y progreso de lecciones~~ ✅ Hecho y **verificado contra
    Supabase real** (11 oct) — ver "Progreso técnico". Rama `feature/retos-envios-ranking`.
 7b. ~~Retos Wi-Fi jugables~~ ✅ **Solución temporal hecha (11 oct):** los 8 retos Wi-Fi usan
@@ -568,6 +570,14 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 7d. ~~Conectar la terminal Kali (Node) con FastAPI~~ ✅ Hecho (12 oct) — ver "Progreso técnico".
    Falta: probarlo con **Docker real** (computadora con Docker Desktop o la EC2) y un ensayo completo
    de la demo en esa máquina.
+   - ⚠️ **En cada computadora nueva (y en la EC2), correr el seed antes de abrir la terminal:**
+     `python -m app.db.seed_challenges` desde `backend/`. Los archivos de los retos del pipeline
+     (`network-wep-01.pcap`, `crypto-xor-01.bin`) se generan en `challenges/generated/`, que está
+     en `.gitignore` y **no viaja con el repo**. Sin ellos, FastAPI responde 404 al pedir el
+     archivo, Node aborta al preparar el workspace **antes** de crear la red y los contenedores, y
+     el diagnóstico de Kali muestra "network … not found" / "No such container" — parece un fallo
+     de Docker pero no lo es (pasó el 12 oct en la PC Windows). El seed es idempotente y las flags
+     salen del catálogo, así que correrlo de nuevo no cambia nada.
 7e. **Análisis de desempeño + dificultad adaptativa (Pandas / scikit-learn).** Es **requisito del
    proyecto** (sección "Objetivo": analizar el desempeño y adaptar la dificultad) — no se descarta
    ni se pospone indefinidamente. Los datos ya se guardan: cada envío con hora, acierto y origen
