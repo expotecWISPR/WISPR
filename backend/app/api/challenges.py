@@ -27,11 +27,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.players import _json_body, get_current_player
+from app.api.players import _json_body, get_current_player, get_optional_player
 from app.core import rate_limit
 from app.db.session import get_db
 from app.models.user import User
-from app.services import challenges, lessons, scoring
+from app.services import challenge_factory, challenges, instances, lessons, scoring
 
 router = APIRouter(tags=["challenges"])
 
@@ -39,9 +39,43 @@ TERMINAL_UNAVAILABLE = "La terminal Kali todavía no está disponible en este ba
 
 
 @router.get("/challenges")
-def list_challenges(db: Session = Depends(get_db)):
-    """Pública (sin sesión), como en el prototipo: es solo el catálogo."""
-    return {"ok": True, "challenges": [challenges.public_challenge(c) for c in challenges.list_active(db)]}
+def list_challenges(db: Session = Depends(get_db), player: User | None = Depends(get_optional_player)):
+    """
+    Pública (sin sesión), como en el prototipo: es el catálogo. Con sesión,
+    incluye además los retos que el motor adaptativo creó para ese jugador.
+    """
+    visible = challenges.list_active(db, player.id if player else None)
+    return {"ok": True, "challenges": [challenges.public_challenge(c) for c in visible]}
+
+
+@router.get("/challenges/options")
+def generation_options():
+    """Pública. Técnicas, niveles y escenarios que se pueden elegir al pedir un reto."""
+    return {"ok": True, **challenge_factory.options()}
+
+
+@router.post("/challenges/generate")
+async def generate_challenge(
+    request: Request, db: Session = Depends(get_db), player: User = Depends(get_current_player)
+):
+    """
+    Pide un reto nuevo eligiendo técnica, dificultad y escenario. La IA escribe
+    la historia; la flag y el archivo los genera el backend. Estudiante: reto de
+    práctica solo para él (sin puntos). Profesor/admin: reto para todos los
+    estudiantes. Ver app/services/challenge_factory.py.
+    """
+    # Cada pedido puede llamar a la IA (cuesta) y genera un archivo: 6 cada
+    # 10 minutos por persona alcanzan de sobra para practicar.
+    rate_limit.check("generate", str(player.id), limit=6, window_seconds=600)
+    result = challenge_factory.request_challenge(db, player, await _json_body(request))
+    if not result["ok"]:
+        return JSONResponse(status_code=400, content=result)
+    return {
+        "ok": True,
+        "challenge": challenges.public_challenge(result["challenge"]),
+        "visibleTo": "everyone" if result["purpose"] == "class" else "me",
+        "generationError": scoring.TEMPLATE_STORY if result["aiError"] else "",
+    }
 
 
 @router.get("/platform/status")
@@ -55,12 +89,14 @@ async def activate_challenge(
     request: Request, db: Session = Depends(get_db), player: User = Depends(get_current_player)
 ):
     body = await _json_body(request)
-    challenge = challenges.get_active(db, body.get("challengeId"))
+    challenge = challenges.get_active(db, body.get("challengeId"), player.id)
     if challenge is None:
         return JSONResponse(status_code=400, content={"ok": False, "error": "Reto o sesión inválidos."})
     # El prototipo acá preparaba el workspace del jugador y su contenedor Kali.
-    # Sin terminal todavía, solo se confirma el reto; los archivos se bajan
-    # desde la web (`/challenges/{id}/files/{name}`).
+    # Sin terminal todavía, solo se confirma el reto (y se deja lista su
+    # instancia, si es por jugador); los archivos se bajan desde la web
+    # (`/challenges/{id}/files/{name}`).
+    instances.get_or_create(db, player.id, challenge)
     return {
         "ok": True,
         "challenge": {**challenges.public_challenge(challenge), "directory": "/workspace/challenge"},
@@ -73,8 +109,8 @@ async def activate_challenge(
 def download_file(
     challenge_id: str, file_name: str, db: Session = Depends(get_db), player: User = Depends(get_current_player)
 ):
-    challenge = challenges.get_active(db, challenge_id)
-    path = challenges.artifact_path(challenge, file_name) if challenge else None
+    challenge = challenges.get_active(db, challenge_id, player.id)
+    path = challenges.artifact_path(db, player.id, challenge, file_name) if challenge else None
     if path is None:
         return JSONResponse(status_code=404, content={"ok": False, "error": "Archivo no encontrado."})
     media_type = {".pcap": "application/vnd.tcpdump.pcap", ".txt": "text/plain; charset=utf-8"}.get(

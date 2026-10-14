@@ -80,6 +80,12 @@ def get_current_player(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_optional_player(request: Request, db: Session = Depends(get_db)) -> User | None:
+    """Como get_current_player, pero para rutas públicas: sin sesión válida devuelve None."""
+    token = _bearer_token(request)
+    return resolve_session(db, token) if token else None
+
+
 @router.post("/register", dependencies=[_CODE_LIMIT])
 async def register(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)

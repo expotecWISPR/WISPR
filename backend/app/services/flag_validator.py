@@ -6,12 +6,15 @@ Migrado de `flagsMatch` + el inicio de `verifySubmission` en
 correcta para este jugador en este reto?" — registrar el intento y sumar
 puntos es trabajo de `scoring.py`.
 
-¿De dónde sale la flag esperada? (decisión del 11 oct)
+¿De dónde sale la flag esperada? (decisión del 11 oct, ajustada el 13 oct)
   1. Si el jugador tiene una instancia personal del reto
      (`challenge_instances`), se usa esa flag — es la que va dentro de SU
-     copia del archivo (ej. su BSSID en un reto de deauth).
-  2. Si no, la flag fija del catálogo (`challenges.flag`).
-Es el mismo respaldo del prototipo: `getInstanceFlag(...) || challenge.flag`.
+     copia del archivo.
+  2. Si el reto es por jugador (técnica con generador, ver instances.py) y
+     todavía no tiene instancia, NINGUNA flag es válida: la del catálogo es
+     la de la plantilla, que está en el repo, y aceptarla dejaría ganar sin
+     resolver nada.
+  3. Si no, la flag fija del catálogo (`challenges.flag`) — retos Wi-Fi.
 """
 
 import hmac
@@ -20,6 +23,7 @@ import re
 from sqlalchemy.orm import Session as DbSession
 
 from app.models.challenge import Challenge, ChallengeInstance
+from app.services.technique_info import TECHNIQUES
 
 # Mismo regex que `FLAG_PATTERN` en app/schemas/challenge.py y que el prototipo.
 FLAG_FORMAT = re.compile(r"^WISPR\{[^{}\r\n]{3,180}\}$")
@@ -30,9 +34,13 @@ def is_valid_format(flag: str) -> bool:
     return bool(FLAG_FORMAT.match(flag))
 
 
-def expected_flag(db: DbSession, user_id: int, challenge: Challenge) -> str:
+def expected_flag(db: DbSession, user_id: int, challenge: Challenge) -> str | None:
     instance = db.get(ChallengeInstance, (user_id, challenge.id))
-    return instance.flag if instance is not None else challenge.flag
+    if instance is not None:
+        return instance.flag
+    if challenge.kind in TECHNIQUES:
+        return None
+    return challenge.flag
 
 
 def flags_match(submitted: str, expected: str) -> bool:
@@ -47,4 +55,5 @@ def flags_match(submitted: str, expected: str) -> bool:
 
 def check_flag(db: DbSession, user_id: int, challenge: Challenge, submitted: str) -> bool:
     """`submitted` ya debe venir con `.strip()` y con formato validado."""
-    return flags_match(submitted, expected_flag(db, user_id, challenge))
+    expected = expected_flag(db, user_id, challenge)
+    return expected is not None and flags_match(submitted, expected)

@@ -9,14 +9,13 @@ reiniciar. Guarda tanto los retos Wi-Fi hechos a mano del prototipo
 (`generator="ai"`, ver docs/pipeline_ia_retos.md) — una sola tabla para
 los dos orígenes, así el frontend no tiene que distinguirlos.
 
-`challenge_instances` guarda la flag PERSONAL de cada (jugador, reto): en
-el prototipo cada estudiante recibe su propia copia del archivo con una
-flag distinta, para que no pueda pasársela a un compañero. Decisión del
-11 oct: la tabla se crea ya (para no necesitar otra migración después),
-pero mientras no se migre la generación de archivos por jugador
-(`challenge-instances.js`) queda vacía y se valida contra `Challenge.flag`
-— exactamente el respaldo que ya usa el prototipo
-(`getInstanceFlag(...) || challenge.flag`).
+`challenge_instances` guarda la flag PERSONAL de cada (jugador, reto): cada
+estudiante recibe su propia copia del archivo con una flag distinta, para
+que no pueda pasársela a un compañero. Desde el 13 oct se usa para los retos
+del pipeline (técnicas de challenge_generator.py): la instancia se crea la
+primera vez que el jugador pide el archivo (app/services/instances.py). Los
+retos Wi-Fi siguen con archivo fijo y se validan contra `Challenge.flag`
+hasta portar su generador a Python (CLAUDE.md, punto 7c).
 """
 
 from datetime import datetime, timezone
@@ -70,6 +69,14 @@ class Challenge(Base):
     # historial y el ranking (la llave foránea de `submissions` lo impide).
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Dueño de un reto creado por el motor adaptativo (13 oct): al resolver un
+    # reto, el backend crea el siguiente para ESE jugador, con historia de la
+    # IA (ver app/services/challenge_factory.py). Solo su dueño lo ve y lo
+    # puede jugar. None = reto del catálogo, visible para todos.
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -90,6 +97,10 @@ class ChallengeInstance(Base):
         String(80), ForeignKey("challenges.id", ondelete="CASCADE"), primary_key=True
     )
     flag: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Archivo de ESTA instancia, relativo a challenges/generated/ (ej.
+    # "instances/7/crypto-xor-01/9f3a.../crypto-xor-01.bin"). Ver
+    # app/services/instances.py.
+    artifact: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

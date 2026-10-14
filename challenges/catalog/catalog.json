@@ -257,12 +257,6 @@
       "title": "IV Repetido",
       "template": "templates/network/template.json",
       "category": "WEP",
-      "objective": "Encuentra los dos paquetes que reutilizan el IV, recupera el keystream con el texto conocido y descifra la flag.",
-      "tools": [
-        "wireshark",
-        "scapy",
-        "python3"
-      ],
       "files": [
         {
           "name": "network-wep-01.pcap",
@@ -276,11 +270,6 @@
       "title": "XOR de un Byte",
       "template": "templates/crypto/template.json",
       "category": "Criptografía",
-      "objective": "Prueba las 256 llaves posibles y encuentra la que produce texto legible.",
-      "tools": [
-        "python3",
-        "xxd"
-      ],
       "files": [
         {
           "name": "crypto-xor-01.bin",

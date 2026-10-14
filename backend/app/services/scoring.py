@@ -11,14 +11,15 @@ Las respuestas conservan la forma exacta del prototipo (llaves en
 camelCase, tiempos en milisegundos desde 1970 como `Date.now()`) porque el
 frontend terminado las lee tal cual.
 
-Diferencia a propósito con el prototipo: al resolver un reto, el prototipo
-generaba en ese momento un reto "de continuación" (`createFollowUpChallenge`).
-Acá `nextChallenge` se devuelve siempre en `None` por ahora — conectar eso
-con el pipeline de IA (`ai_advisor.py`) es un paso aparte; la llave se deja
-para no romper al frontend.
+Al resolver un reto, igual que `createFollowUpChallenge` del prototipo, la
+respuesta trae `nextChallenge`: el siguiente reto según el motor adaptativo
+(difficulty.py), que puede ser uno nuevo con historia de la IA. El frontend
+ya lo agrega a la cola del jugador.
 """
 
 from __future__ import annotations
+
+import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -28,9 +29,13 @@ from app.core.time_utils import as_utc
 from app.models.challenge import Challenge
 from app.models.submission import Solve, Submission
 from app.models.user import User
-from app.services import flag_validator
+from app.services import challenges, difficulty, flag_validator
+
+log = logging.getLogger(__name__)
 
 CHALLENGE_NOT_FOUND = "El reto no existe o ya no está disponible."
+NEXT_FAILED = "Resolviste el reto, pero no se pudo preparar el siguiente. Intenta de nuevo más tarde."
+TEMPLATE_STORY = "La historia de este reto es de plantilla: la IA no estaba disponible."
 # El prototipo guardaba solo los últimos 100 envíos por jugador, así que la
 # racha nunca pasaba de 100. Se mantiene el tope para que el número sea el
 # mismo y la consulta quede acotada.
@@ -42,9 +47,28 @@ def _ms(value) -> int:
     return int(as_utc(value).timestamp() * 1000)
 
 
+def _next_challenge(db: DbSession, user: User, solved: Challenge) -> dict:
+    """
+    Las llaves `nextChallenge`/`generationError` de la respuesta. El acierto
+    ya quedó guardado: si esto falla, el jugador igual tiene sus puntos.
+    """
+    try:
+        recommended, reason, ai_error = difficulty.next_challenge(db, user, solved)
+    except Exception:
+        log.exception("No se pudo preparar el siguiente reto de %s", solved.id)
+        db.rollback()
+        return {"nextChallenge": None, "generationError": NEXT_FAILED}
+    if recommended is None:
+        return {"nextChallenge": None, "generationError": ""}
+    return {
+        "nextChallenge": {**challenges.public_challenge(recommended), "reason": reason},
+        "generationError": TEMPLATE_STORY if ai_error else "",
+    }
+
+
 def submit_flag(db: DbSession, user: User, challenge_id: str, flag: str, source: str = "web") -> dict:
-    challenge = db.get(Challenge, str(challenge_id or ""))
-    if challenge is None or not challenge.is_active:
+    challenge = challenges.get_active(db, challenge_id, user.id)
+    if challenge is None:
         return {"ok": False, "error": CHALLENGE_NOT_FOUND}
 
     submitted = str(flag or "").strip()
@@ -80,8 +104,7 @@ def submit_flag(db: DbSession, user: User, challenge_id: str, flag: str, source:
         "ok": True,
         "challengeId": challenge.id,
         "points": challenge.points,
-        "nextChallenge": None,
-        "generationError": "",
+        **_next_challenge(db, user, challenge),
     }
 
 

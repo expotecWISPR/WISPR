@@ -1,28 +1,41 @@
 """
 Tests de app/services/challenge_generator.py.
 
-No alcanza con comprobar que el generador "no explota" — cada técnica acá
-se prueba simulando el ataque que haría un estudiante (sin conocer ninguna
-llave secreta de antemano) y confirmando que recupera exactamente la flag
-del ChallengeSpec. Si estas pruebas pasan, el reto es genuinamente
-resoluble, no solo "parece" correcto.
+No alcanza con comprobar que el generador "no explota" — cada técnica y
+cada nivel se prueba simulando el ataque que haría un estudiante (sin
+conocer ninguna llave secreta de antemano) y confirmando que recupera
+exactamente la flag del ChallengeSpec. Además (guía del ingeniero, fase 2):
+el método del nivel anterior NO debe servir en el siguiente, y dos archivos
+del mismo reto deben ser distintos.
 """
 
-import unittest
-from pathlib import Path
+import base64
+import re
+from collections import defaultdict
 
-from scapy.layers.dot11 import Dot11WEP
+import pytest
+from scapy.layers.dot11 import Dot11, Dot11WEP
 from scapy.utils import rdpcap
 
 from app.schemas.challenge import ChallengeSpec
+from app.services import challenge_generator
 from app.services.challenge_generator import (
-    GENERATED_DIR,
     _SNAP_HEADER_ARP,
     _build_known_plaintext,
+    generate_flag,
     generate_wep_reused_iv_pcap,
     generate_xor_challenge,
     materialize_challenge,
 )
+
+FLAG_RE = re.compile(rb"^WISPR\{[^{}\r\n]{3,180}\}$")
+
+
+@pytest.fixture(autouse=True)
+def generated_dir(tmp_path, monkeypatch):
+    """Los archivos de prueba van a una carpeta temporal, no a challenges/generated/."""
+    monkeypatch.setattr(challenge_generator, "GENERATED_DIR", tmp_path)
+    return tmp_path
 
 
 def _make_spec(**overrides) -> ChallengeSpec:
@@ -40,116 +53,147 @@ def _make_spec(**overrides) -> ChallengeSpec:
     return ChallengeSpec(**base)
 
 
-class _LimpiaArchivosGenerados(unittest.TestCase):
-    """Borra cualquier archivo que la prueba haya escrito en GENERATED_DIR."""
-
-    def setUp(self):
-        self._archivos_generados: list[Path] = []
-
-    def tearDown(self):
-        for path in self._archivos_generados:
-            path.unlink(missing_ok=True)
-
-    def _track(self, path: Path) -> Path:
-        self._archivos_generados.append(path)
-        return path
+def _xor_spec(difficulty: str, flag: str = "WISPR{xor_prueba_123}") -> ChallengeSpec:
+    return _make_spec(id=f"test-xor-{difficulty}", category="crypto", technique="xor_singlebyte",
+                      difficulty=difficulty, flag=flag)
 
 
-class TestGenerateWepReusedIvPcap(_LimpiaArchivosGenerados):
-    def test_recupera_la_flag_por_reutilizacion_de_iv(self):
-        """
-        Simula exactamente el ataque descrito en docs/pipeline_ia_retos.md:
-        con dos paquetes que comparten IV, XOR contra el plaintext conocido
-        (cabecera SNAP + ARP estándar) recupera la flag sin conocer la
-        llave WEP.
-        """
-        spec = _make_spec(id="test-wep-iv-reuse", technique="iv_reuse_wep", flag="WISPR{prueba_wep_iv}")
-        path = self._track(generate_wep_reused_iv_pcap(spec))
-
-        self.assertTrue(path.exists())
-        self.assertEqual(path.parent, GENERATED_DIR)
-
-        packets = rdpcap(str(path))
-        self.assertEqual(len(packets), 2)
-
-        wep1, wep2 = packets[0][Dot11WEP], packets[1][Dot11WEP]
-        self.assertEqual(bytes(wep1.iv), bytes(wep2.iv), "los dos paquetes deben reutilizar el mismo IV")
-
-        known_plaintext = _build_known_plaintext(min_len=max(len(wep1.wepdata), len(wep2.wepdata)))
-        keystream = bytes(a ^ b for a, b in zip(wep1.wepdata, known_plaintext))
-        recovered_plaintext = bytes(a ^ b for a, b in zip(wep2.wepdata, keystream))
-        recovered_flag = recovered_plaintext[len(_SNAP_HEADER_ARP):].rstrip(b"\x00").decode("utf-8")
-
-        self.assertEqual(recovered_flag, spec.flag)
-
-    def test_dos_llamadas_generan_llaves_distintas(self):
-        """
-        Cada reto debe tener su propia llave WEP aleatoria — si dos
-        instancias del mismo reto compartieran llave, resolver una
-        filtraría la otra.
-        """
-        spec_a = _make_spec(id="test-wep-a", flag="WISPR{reto_a}")
-        spec_b = _make_spec(id="test-wep-b", flag="WISPR{reto_b}")
-        path_a = self._track(generate_wep_reused_iv_pcap(spec_a))
-        path_b = self._track(generate_wep_reused_iv_pcap(spec_b))
-
-        ciphertext_a = rdpcap(str(path_a))[0][Dot11WEP].wepdata
-        ciphertext_b = rdpcap(str(path_b))[0][Dot11WEP].wepdata
-        # Mismo plaintext conocido (paquete 1 en ambos), pero llave distinta
-        # -> el ciphertext no debería coincidir.
-        self.assertNotEqual(bytes(ciphertext_a), bytes(ciphertext_b))
+def _wep_spec(difficulty: str, flag: str = "WISPR{wep_prueba_123}") -> ChallengeSpec:
+    return _make_spec(id=f"test-wep-{difficulty}", difficulty=difficulty, flag=flag)
 
 
-class TestGenerateXorChallenge(_LimpiaArchivosGenerados):
-    def test_recupera_la_flag_por_fuerza_bruta(self):
-        """
-        Simula la fuerza bruta sobre las 256 llaves posibles, sin conocer
-        la llave real usada al generar el archivo.
-        """
-        spec = _make_spec(
-            id="test-xor-bruteforce",
-            category="crypto",
-            technique="xor_singlebyte",
-            flag="WISPR{prueba_xor_bruteforce}",
-        )
-        path = self._track(generate_xor_challenge(spec))
-        self.assertTrue(path.exists())
+# ─── Solvers: lo que haría el estudiante en cada nivel ────────────────────
 
-        ciphertext = path.read_bytes()
-        recovered = None
-        for key in range(256):
-            candidate = bytes(b ^ key for b in ciphertext)
-            try:
-                text = candidate.decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-            if text.startswith("WISPR{") and text.endswith("}"):
-                recovered = text
-                break
-
-        self.assertEqual(recovered, spec.flag)
-
-    def test_dos_llamadas_generan_llaves_distintas(self):
-        spec_a = _make_spec(id="test-xor-a", category="crypto", technique="xor_singlebyte", flag="WISPR{reto_a}")
-        spec_b = _make_spec(id="test-xor-b", category="crypto", technique="xor_singlebyte", flag="WISPR{reto_a}")
-        path_a = self._track(generate_xor_challenge(spec_a))
-        path_b = self._track(generate_xor_challenge(spec_b))
-        # Misma flag en ambos specs, pero llaves distintas -> ciphertexts
-        # distintos (con probabilidad 255/256 de que la llave no coincida).
-        self.assertNotEqual(path_a.read_bytes(), path_b.read_bytes())
+def _xor_bruteforce_1_byte(data: bytes) -> bytes | None:
+    """Método de easy: probar las 256 llaves de un byte."""
+    for key in range(256):
+        candidate = bytes(b ^ key for b in data)
+        if FLAG_RE.match(candidate):
+            return candidate
+    return None
 
 
-class TestMaterializeChallenge(_LimpiaArchivosGenerados):
-    def test_despacha_iv_reuse_wep_al_generador_correcto(self):
-        spec = _make_spec(id="test-dispatch-wep", technique="iv_reuse_wep")
-        path = self._track(materialize_challenge(spec))
-        self.assertTrue(path.suffix == ".pcap")
+def _xor_known_plaintext(data: bytes, max_len: int) -> bytes | None:
+    """Método de medium/hard: llave = cifrado XOR 'WISPR{', probando largos."""
+    known = b"WISPR{"
+    for length in range(1, max_len + 1):
+        key = bytes(data[i] ^ known[i] for i in range(min(length, len(known))))
+        if len(key) < length:
+            continue
+        candidate = bytes(b ^ key[i % length] for i, b in enumerate(data))
+        if FLAG_RE.match(candidate):
+            return candidate
+    return None
 
-    def test_despacha_xor_singlebyte_al_generador_correcto(self):
-        spec = _make_spec(id="test-dispatch-xor", category="crypto", technique="xor_singlebyte")
-        path = self._track(materialize_challenge(spec))
-        self.assertTrue(path.suffix == ".bin")
+
+def _wep_pairs(packets) -> list:
+    by_iv = defaultdict(list)
+    for pkt in packets:
+        by_iv[bytes(pkt[Dot11WEP].iv)].append(pkt)
+    repeated = [group for group in by_iv.values() if len(group) > 1]
+    assert len(repeated) == 1, "debe haber exactamente un IV repetido"
+    return repeated[0]
 
 
-if __name__ == "__main__":
-    unittest.main()
+def _wep_recover(known_pkt, flag_pkt) -> bytes:
+    known = _build_known_plaintext(known_pkt[Dot11].addr2, min_len=len(flag_pkt[Dot11WEP].wepdata))
+    keystream = bytes(a ^ b for a, b in zip(known_pkt[Dot11WEP].wepdata, known))
+    plaintext = bytes(a ^ b for a, b in zip(flag_pkt[Dot11WEP].wepdata, keystream))
+    return plaintext[len(_SNAP_HEADER_ARP):].rstrip(b"\x00")
+
+
+# ─── XOR ──────────────────────────────────────────────────────────────────
+
+def test_xor_easy_se_resuelve_por_fuerza_bruta():
+    spec = _xor_spec("easy")
+    data = generate_xor_challenge(spec).read_bytes()
+    assert _xor_bruteforce_1_byte(data) == spec.flag.encode()
+
+
+@pytest.mark.parametrize("_", range(5))  # la llave es al azar: varias corridas
+def test_xor_medium_no_cae_con_fuerza_bruta_pero_si_con_texto_conocido(_):
+    spec = _xor_spec("medium")
+    data = generate_xor_challenge(spec).read_bytes()
+    assert _xor_bruteforce_1_byte(data) is None
+    assert _xor_known_plaintext(data, max_len=4) == spec.flag.encode()
+
+
+@pytest.mark.parametrize("_", range(5))
+def test_xor_hard_esta_en_base64_y_se_resuelve_decodificando_primero(_):
+    spec = _xor_spec("hard")
+    data = generate_xor_challenge(spec).read_bytes()
+    # Ni el método de easy ni el de medium sirven sobre el archivo tal cual.
+    assert _xor_bruteforce_1_byte(data) is None
+    assert _xor_known_plaintext(data, max_len=4) is None
+    decoded = base64.b64decode(data)
+    assert _xor_bruteforce_1_byte(decoded) is None
+    assert _xor_known_plaintext(decoded, max_len=6) == spec.flag.encode()
+
+
+# ─── WEP ──────────────────────────────────────────────────────────────────
+
+def test_wep_easy_dos_tramas_mismo_iv():
+    spec = _wep_spec("easy")
+    packets = rdpcap(str(generate_wep_reused_iv_pcap(spec)))
+    assert len(packets) == 2
+    assert bytes(packets[0][Dot11WEP].iv) == bytes(packets[1][Dot11WEP].iv)
+    assert _wep_recover(packets[0], packets[1]) == spec.flag.encode()
+
+
+def test_wep_medium_esconde_el_par_entre_ruido():
+    spec = _wep_spec("medium")
+    packets = rdpcap(str(generate_wep_reused_iv_pcap(spec)))
+    assert 22 <= len(packets) <= 52
+    known, flag = _wep_pairs(packets)          # en medium, el ARP va primero
+    assert _wep_recover(known, flag) == spec.flag.encode()
+
+
+def test_wep_hard_el_metodo_de_medium_no_sirve():
+    spec = _wep_spec("hard")
+    packets = rdpcap(str(generate_wep_reused_iv_pcap(spec)))
+    assert 202 <= len(packets) <= 402
+    first, second = _wep_pairs(packets)
+    # "La primera del par es el ARP" (medium) da basura en hard.
+    assert _wep_recover(first, second) != spec.flag.encode()
+    # Identificando el ARP por su largo (36 bytes), sí sale.
+    arp = first if len(first[Dot11WEP].wepdata) == 36 else second
+    other = second if arp is first else first
+    assert _wep_recover(arp, other) == spec.flag.encode()
+
+
+# ─── Variedad: dos generaciones nunca dan el mismo archivo ─────────────────
+
+@pytest.mark.parametrize("technique,difficulty", [
+    ("xor_singlebyte", "medium"), ("xor_singlebyte", "hard"),
+    ("iv_reuse_wep", "easy"), ("iv_reuse_wep", "medium"),
+])
+def test_mismo_reto_dos_veces_da_archivos_distintos(tmp_path, technique, difficulty):
+    category = "crypto" if technique == "xor_singlebyte" else "network"
+    spec = _make_spec(technique=technique, category=category, difficulty=difficulty)
+    a = materialize_challenge(spec, tmp_path / "a" / "f").read_bytes()
+    b = materialize_challenge(spec, tmp_path / "b" / "f").read_bytes()
+    assert a != b
+
+
+def test_wep_sortea_iv_y_macs_en_cada_archivo(tmp_path):
+    spec = _wep_spec("easy")
+    first = rdpcap(str(materialize_challenge(spec, tmp_path / "a.pcap")))[0]
+    second = rdpcap(str(materialize_challenge(spec, tmp_path / "b.pcap")))[0]
+    assert (bytes(first[Dot11WEP].iv), first[Dot11].addr2) != (bytes(second[Dot11WEP].iv), second[Dot11].addr2)
+
+
+# ─── Flags y despacho ─────────────────────────────────────────────────────
+
+def test_generate_flag_es_valida_y_no_se_repite():
+    flags = {generate_flag("xor_singlebyte") for _ in range(200)}
+    assert len(flags) == 200
+    for flag in flags:
+        assert re.fullmatch(r"WISPR\{xor_[0-9a-f]{8}\}", flag)
+    assert generate_flag("iv_reuse_wep").startswith("WISPR{wep_")
+
+
+def test_materialize_usa_la_extension_del_nivel(generated_dir):
+    assert materialize_challenge(_wep_spec("easy")).name == "test-wep-easy.pcap"
+    assert materialize_challenge(_xor_spec("easy")).suffix == ".bin"
+    assert materialize_challenge(_xor_spec("hard")).suffix == ".txt"
+    assert materialize_challenge(_xor_spec("easy")).parent == generated_dir

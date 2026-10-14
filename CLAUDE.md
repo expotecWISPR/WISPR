@@ -63,25 +63,24 @@ La implementación será completamente propia.
 
 # Generación de retos
 
-Los retos no se generan libremente por IA sin control. El sistema combina dos capas:
+Los retos no se generan libremente por IA sin control. **Desde el 13 oct** (guía del
+ingeniero, `docs/Guía WISPR retos variados y dificultad adaptativa.pdf`) el reparto es:
 
-1. **Especificación (IA):** un modelo de lenguaje (Together AI + Llama 3.3 70B, ajustado con
-   LoRA) genera un JSON con los parámetros del reto — narrativa, descripción, pista, flag,
-   dificultad y la técnica específica a usar.
-2. **Materialización (determinista):** ese JSON se valida con un schema de Pydantic
-   (`app/schemas/challenge.py`) y se pasa a un generador del equipo
-   (`app/services/challenge_generator.py`), que construye el archivo o entorno real (ej. con
-   Scapy) según la técnica indicada.
+1. **Lo decide el backend (código):** la técnica (registro fijo), la dificultad (motor
+   adaptativo, `app/services/difficulty.py`), los parámetros de cada nivel
+   (`challenge_generator.py`) y la flag (aleatoria, con `secrets`, distinta por jugador).
+2. **Lo escribe la IA (Together AI + Llama 3.3 70B):** solo la historia — título, descripción y
+   una pista —, con un escenario elegido al azar y sin repetir los títulos que el jugador ya vio
+   (`app/services/ai_advisor.py`). Si falla, se usa una plantilla.
+3. **Materialización (determinista):** todo se valida con `ChallengeSpec`
+   (`app/schemas/challenge.py`) y el generador del equipo construye el archivo **de ese
+   jugador** (`app/services/instances.py`).
 
-La IA **no inventa mecanismos nuevos.** Solo puede elegir la técnica de un **registro fijo**
-de técnicas que el equipo ya programó y probó (ej. `iv_reuse_wep`, `xor_singlebyte`). Si el
-modelo devuelve una técnica fuera del registro, o un JSON con forma inválida, la validación de
-Pydantic lo rechaza antes de intentar generar nada — nunca se materializa un archivo o
-contenedor sin pasar por esa validación.
-
-Esto mantiene el objetivo original: variantes únicas con coherencia y control, pero ahora los
-valores de esas variantes (incluida la narrativa y la flag) los decide un modelo entrenado en
-vez de estar fijos en el código.
+Por qué se cambió: antes la IA generaba el reto entero (narrativa + flag + técnica + dificultad)
+y, con solo 2 técnicas posibles, lo único que podía variar era el texto — repetía los ejemplos.
+La variedad real ahora sale del código (archivo y flag por jugador, niveles que cambian el
+archivo) y la IA aporta variedad de historias. La IA **no inventa mecanismos nuevos** ni decide
+nada que haga a un reto más fácil o más difícil.
 
 Para el MVP, el pipeline se implementa completo solo en 1-2 categorías (crypto y network son
 las que ya tienen ejemplos curados); el resto usa retos estáticos hechos a mano.
@@ -101,12 +100,12 @@ Su función es:
 * ajustar dificultad,
 * generar o modificar pistas,
 * ayudar en la personalización,
-* generar la especificación (narrativa, flag, parámetros y técnica) de nuevos retos, dentro de
-  un registro fijo de técnicas ya construidas por el equipo.
+* escribir la historia (título, descripción y pista) de cada reto nuevo que el motor adaptativo
+  crea para un jugador. La técnica, la dificultad y la flag las decide el backend (13 oct).
 
-La IA no reemplaza el motor de generación procedural: propone parámetros, el motor
-determinista los materializa. Ningún archivo, contenedor o flag se genera sin pasar primero por
-la validación de Pydantic. Detalle completo del flujo en `docs/pipeline_ia_retos.md`.
+La IA no reemplaza el motor de generación procedural: aporta el texto, el motor determinista
+decide y materializa. Ningún archivo, contenedor o flag se genera sin pasar primero por la
+validación de Pydantic. Detalle completo del flujo en `docs/pipeline_ia_retos.md`.
 
 **Modelo y método:** Llama 3.3 70B Instruct Turbo vía Together AI, ajustado con **LoRA**
 (no fine-tuning completo — se evaluó y se descartó por costo e infraestructura de GPU). El
@@ -206,8 +205,9 @@ complejidad innecesaria a esta escala (ver `docs/arquitectura_mvp.md`).
   descartó: requiere GPUs dedicadas y días de entrenamiento, inviable con los recursos del
   equipo. LoRA es viable porque solo entrena una fracción pequeña de los parámetros y corre
   como servicio administrado.
-* Usos: generar la especificación de nuevos retos (narrativa, flag, técnica, dificultad — ver
-  `docs/pipeline_ia_retos.md`), recomendaciones de retos, ajuste de dificultad y pistas.
+* Usos: escribir la historia (título, descripción, pista) de cada reto nuevo — ver
+  `docs/pipeline_ia_retos.md`. La recomendación y el ajuste de dificultad los hace el motor de
+  reglas (`difficulty.py`), no la IA.
 
 ---
 
@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 12 de octubre de 2026.
+**Última actualización:** 13 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -296,6 +296,25 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   Request, nadie commitea directo a `main`) se dejó: el backend lo lleva una sola persona y el
   frontend vive en su propio repositorio (`WISPR-frontend`, ver pendiente 6b). Se commitea
   directo a `main`.
+* **Guía del ingeniero: retos variados y dificultad adaptativa (13 oct).** PDF en `docs/`. Problema:
+  la IA repetía los ~500 ejemplos en vez de crear retos nuevos. Diagnóstico confirmado en el código:
+  la IA no se llamaba en ningún lado, los archivos y flags eran iguales para todos, la dificultad
+  solo cambiaba los puntos y `nextChallenge` siempre era `None`. Decisiones tomadas al aplicarla:
+  - **La IA solo escribe la historia; la técnica, la dificultad y la flag las decide el código**
+    (ver "Generación de retos" arriba). Se borró `generate_challenge_spec_raw()`.
+  - Categorías: `stego`, `reverse` y `misc` se **agregaron** al `Literal` de `ChallengeSpec` en vez
+    de reclasificar ~290 retos a mano: lo que decide qué código corre es `technique`, no la categoría.
+  - La instancia por jugador se crea **al pedir el archivo**, no en `POST /challenges/active` como
+    decía la guía: esa ruta la atiende Node (nginx), FastAPI no la ve. La descarga sí pasa siempre
+    por FastAPI (web y Node, con el token del jugador), así que los dos reciben el mismo archivo.
+  - El nivel por categoría **no se guarda en una tabla**: se calcula del historial
+    (`submissions`/`solves`), así nunca se desincroniza. El uso de pistas todavía no cuenta (el
+    frontend no le avisa al backend al abrir una).
+  - WEP: las IPs del ARP conocido quedan **fijas** (son el texto conocido documentado en el
+    objetivo); IV, MACs y llave se sortean en cada archivo. Randomizar las IPs obligaría a mostrar
+    un objetivo distinto por jugador.
+  - En esta PC, Norton inspecciona HTTPS y Python no confía en su certificado: se agregó
+    `truststore` (usa los certificados de Windows/Linux) solo para el cliente de Together.
 * Versión de Python para el venv del backend: **3.12, 3.13 o 3.14** sirven, en Windows y Linux.
   **Verificado el 12 oct con `uv pip compile --only-binary :all:`** (simula la instalación en cada
   plataforma sin compilar nada) para las 6 combinaciones. Corrección: el 11 oct se dijo lo mismo
@@ -522,6 +541,45 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     punta + UI real en Chromium (registro → Abrir Kali → `ctf submit` → 120 pts) + FastAPI caído +
     modo de siempre sin cambios. **Falta probarlo con Docker real.**
 
+* **Retos variados + dificultad adaptativa + IA para historias (13 oct) — fases 1 a 5 de la guía.**
+  Verificado contra Supabase real (migración `4c7e2a91d0b5` aplicada, seed corrido) con el guion de
+  demo de la guía. 164 tests.
+  - **Fase 2, niveles reales** (`challenge_generator.py`, tablas `XOR_LEVELS`/`WEP_LEVELS`): XOR
+    easy = llave de 1 byte; medium = 2-4 bytes (la fuerza bruta de 256 ya no sirve, se usa el texto
+    conocido `WISPR{`); hard = 5-6 bytes y en base64. WEP easy = 2 tramas; medium = el par entre
+    20-50 tramas de ruido; hard = 200-400 tramas, el ARP lo manda el AP y va segundo (el método de
+    medium da basura). Textos técnicos por nivel en `technique_info.py` (los escribe el equipo).
+    Tests: cada nivel se resuelve como lo haría el estudiante y el método del nivel anterior falla.
+  - **Fase 3, archivo y flag por jugador** (`instances.py`, columna `challenge_instances.artifact`):
+    flag `WISPR{xor_<8 hex>}`; la flag de la plantilla (pública en el repo) ya no se acepta. El seed
+    ya **no genera archivos** (se acabó el aviso de 7d para XOR/WEP).
+  - **Fase 4, dificultad adaptativa** (`difficulty.py`): 1.º-2.º intento → sube; 3-6 intentos → se
+    mantiene; 6+ fallos → baja; en los extremos se queda. `nextChallenge` ya no es `None`: en XOR/WEP
+    se crea un reto nuevo para el jugador (`challenge_factory.py`, columna `challenges.owner_id`, solo
+    lo ve su dueño); en Wi-Fi se recomienda uno del catálogo. `/api/players/me` trae `levels`.
+  - **Fase 5, IA** (`ai_advisor.py`): Together devuelve `title`/`description`/`hint`, validados con
+    `ChallengeNarrative` (sin llaves, largos, sin repetir títulos). Respaldo a plantilla si falla,
+    tarda >12 s, no hay key o pasa de 20 llamadas/hora por jugador — el jugador nunca ve un error.
+    El reto queda marcado `generator: "ai"` o `"template"`.
+  - **Fase 1, dataset** (`challenges/dataset/`): original + limpio, con
+    `python -m app.services.dataset_cleaner` (FLAG→WISPR, `technique`/`technique_notes`, lote manual
+    completo + 117 del lote de IA que pasan el criterio de la guía, sin flags ni títulos repetidos).
+    Valida con `DatasetChallenge`.
+  - **Pedir un reto eligiendo parámetros** (plan original del pipeline: "el usuario elige categoría
+    + dificultad de opciones fijas"). `POST /api/challenges/generate` con técnica, dificultad
+    (Foundation/Medium/Hard) y escenario (de la lista o texto corto validado, que solo afecta la
+    historia); `GET /api/challenges/options` da las opciones. **Estudiante:** reto de práctica solo
+    para él y **sin puntos** (si diera puntos, se podría farmear el ranking pidiendo retos fáciles);
+    máx. 5 sin resolver. **Profesor/admin:** reto para **todos** los estudiantes, con puntos, cada
+    uno con su archivo y su flag (los grupos siguen solo en el prototipo Node; cuando se migren, se
+    podrá publicar para un grupo). La flag **no** se personaliza: quien la elige ya sabe la
+    respuesta. Formulario en `app.js` (pestaña Retos del estudiante, inicio de profesor y admin),
+    sobre el rediseño sin commit. Límite: 6 pedidos cada 10 min por persona.
+  - Frontend (`WISPR-frontend/server.js`, 2 líneas): Node pide el catálogo con el token del jugador
+    (para ver sus retos generados) y `ctf show` dice "única para tu cuenta" solo si lo es.
+  - **La `TOGETHER_API_KEY` de esta PC es inválida** (25 caracteres, Together responde 401): todo
+    se probó con plantillas. Falta poner una key real y probar las historias de la IA.
+
 ## Pendiente (próximos pasos, en orden)
 
 1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
@@ -566,7 +624,10 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
      falta la parte de *construir* las tramas, ~440 líneas de `pcap-wifi.js` + `pcap-challenges.js`.
      Orden: deauth → PMKID → WPA. La tabla `challenge_instances` y `flag_validator.py` ya están
      listos para esto; frontend y rutas no cambian.
-   Después: conectar `nextChallenge` (reto de continuación) con `ai_advisor.py`.
+   **Actualizado 13 oct:** XOR y WEP ya son por jugador (`instances.py`); solo faltan los 8 Wi-Fi.
+   Al portarlos, agregarlos a `technique_info.TECHNIQUES` y `TECHNIQUE_REGISTRY` y pasan solos a
+   ser por jugador y a tener retos generados por el motor adaptativo.
+   ~~Después: conectar `nextChallenge` con `ai_advisor.py`~~ ✅ Hecho (13 oct).
 7d. ~~Conectar la terminal Kali (Node) con FastAPI~~ ✅ Hecho (12 oct) — ver "Progreso técnico".
    Falta: probarlo con **Docker real** (computadora con Docker Desktop o la EC2) y un ensayo completo
    de la demo en esa máquina.
@@ -578,15 +639,22 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
      el diagnóstico de Kali muestra "network … not found" / "No such container" — parece un fallo
      de Docker pero no lo es (pasó el 12 oct en la PC Windows). El seed es idempotente y las flags
      salen del catálogo, así que correrlo de nuevo no cambia nada.
+     **Actualizado 13 oct:** el seed ya no genera archivos (XOR/WEP se generan por jugador al
+     pedirlos), así que este problema ya no aplica. El seed sigue haciendo falta para cargar o
+     actualizar el catálogo en una base nueva.
 7e. **Análisis de desempeño + dificultad adaptativa (Pandas / scikit-learn).** Es **requisito del
    proyecto** (sección "Objetivo": analizar el desempeño y adaptar la dificultad) — no se descarta
    ni se pospone indefinidamente. Los datos ya se guardan: cada envío con hora, acierto y origen
    web/terminal (`submissions`), primer acierto y puntos (`solves`), intentos y progreso de
    lecciones (`lesson_progress`).
-8. Probar `ai_advisor.py` contra la API real de Together (falta un `TOGETHER_API_KEY` real) y
-   agregar la lógica de reintento/respaldo — usar `xor_singlebyte` como técnica estática si
-   Together AI no responde o devuelve algo inválido (hoy esa función solo propaga el error). El
-   fine-tuning con LoRA queda fuera de esto hasta que se resuelva por separado.
+   **Actualizado 13 oct:** la dificultad adaptativa ya funciona con reglas (`difficulty.py`, ver
+   "Progreso técnico"). Falta: (a) que el frontend avise al backend cuando el jugador abre una
+   pista, para sumarla a las reglas; (b) mostrar en la UI el motivo del nivel (`reason` en
+   `nextChallenge`, `levels` en `/me`); (c) Pandas/scikit-learn cuando haya datos reales de uso.
+8. ~~Respaldo de `ai_advisor.py` si Together falla~~ ✅ Hecho (13 oct, plantillas). **Falta:** una
+   `TOGETHER_API_KEY` válida en `backend/.env` y ver historias reales de la IA. El fine-tuning con
+   LoRA queda fuera de esto; si se retoma, entrenar con `challenges/dataset/challenges_limpio.json`
+   (no con el original) y revisar a mano los 117 retos del lote de IA que conservó el limpiador.
 9. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.

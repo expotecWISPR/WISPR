@@ -32,8 +32,13 @@ FLAG_PATTERN = re.compile(r"^WISPR\{[^{}\r\n]{3,180}\}$")
 
 class ChallengeSpec(BaseModel):
     """
-    Especificación de un reto, tal como la genera el modelo de IA
-    (Llama 3.3 70B + LoRA vía Together AI) antes de materializarse.
+    Especificación de un reto, justo antes de materializarse.
+
+    Desde el 13 oct (guía del ingeniero) la arma el backend: la técnica, la
+    dificultad y la flag las decide el código; la IA (Llama 3.3 70B vía
+    Together AI) solo aporta la narrativa (`description` y `hint`, ver
+    ai_advisor.py). Igual pasa por esta validación: nada llega al generador
+    sin ella.
 
     Ejemplo (ver docs/pipeline_ia_retos.md):
         {
@@ -52,7 +57,11 @@ class ChallengeSpec(BaseModel):
 
     difficulty: Literal["easy", "medium", "hard"]
 
-    category: Literal["web", "crypto", "forensics", "network", "osint"]
+    # stego/reverse/misc se agregaron el 13 oct: el dataset del equipo
+    # (challenges.json) los usa en ~290 retos, y reclasificarlos a mano no
+    # aporta nada. No es un riesgo: lo que decide qué código corre es
+    # `technique`, no la categoría.
+    category: Literal["web", "crypto", "forensics", "network", "osint", "stego", "reverse", "misc"]
 
     description: str = Field(
         ..., min_length=1, description="Narrativa del reto que ve el estudiante."
@@ -78,4 +87,35 @@ class ChallengeSpec(BaseModel):
             raise ValueError(
                 f"La flag '{value}' no tiene el formato esperado WISPR{{...}}."
             )
+        return value
+
+
+class DatasetChallenge(BaseModel):
+    """
+    Un reto del dataset del equipo (`challenges/dataset/`, ~500 ejemplos para
+    el LoRA), ya limpio. Misma forma que ChallengeSpec (guía del ingeniero,
+    fase 1) con una diferencia a propósito: `technique` acepta "" porque la
+    mayoría de esos retos todavía no tiene generador. La explicación en texto
+    libre va en `technique_notes`. No se usa para materializar archivos: eso
+    sigue exigiendo ChallengeSpec, con su registro fijo.
+    """
+
+    id: str = Field(..., min_length=1)
+    batch: Literal["manual", "ia"]
+    difficulty: Literal["easy", "medium", "hard"]
+    category: Literal["web", "crypto", "forensics", "network", "osint", "stego", "reverse", "misc"]
+    title: str = Field(..., min_length=3, max_length=90)
+    description: str = Field(..., min_length=1)
+    technique: Literal["", "iv_reuse_wep", "xor_singlebyte"]
+    technique_notes: str = ""
+    flag: str
+    hint: str = Field(..., min_length=1)
+    solution: str = Field(..., min_length=1)
+    created_at: str | None = None
+
+    @field_validator("flag")
+    @classmethod
+    def flag_debe_tener_formato_valido(cls, value: str) -> str:
+        if not FLAG_PATTERN.match(value):
+            raise ValueError(f"La flag '{value}' no tiene el formato esperado WISPR{{...}}.")
         return value

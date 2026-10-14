@@ -70,6 +70,18 @@ def test_la_flag_personal_de_un_jugador_no_sirve_para_otro(db):
     assert flag_validator.check_flag(db, 2, _challenge(db), "WISPR{deauth_6e01d8aa4f22}")
 
 
+def test_reto_por_jugador_sin_instancia_no_acepta_ninguna_flag(db):
+    """La flag del catálogo de un reto del pipeline es la de la plantilla (está en el repo)."""
+    db.add(Challenge(id="crypto-xor-01", title="XOR", category="Criptografía", kind="xor_singlebyte",
+                     difficulty="Foundation", points=120, description="d", flag="WISPR{xor_de_plantilla}"))
+    db.commit()
+    xor = db.get(Challenge, "crypto-xor-01")
+    assert not flag_validator.check_flag(db, 1, xor, "WISPR{xor_de_plantilla}")
+    db.add(ChallengeInstance(user_id=1, challenge_id="crypto-xor-01", flag="WISPR{xor_9f3a01c2}"))
+    db.commit()
+    assert flag_validator.check_flag(db, 1, xor, "WISPR{xor_9f3a01c2}")
+
+
 def test_flags_match_acepta_texto_no_ascii():
     assert flag_validator.flags_match("WISPR{contraseña}", "WISPR{contraseña}")
     assert not flag_validator.flags_match("WISPR{contraseña}", "WISPR{contrasena}")

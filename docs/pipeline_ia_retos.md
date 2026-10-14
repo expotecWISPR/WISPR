@@ -6,10 +6,58 @@ coherencia sobre lo que finalmente se le entrega al estudiante. Complementa las 
 
 ---
 
-## Estado de implementación (26 ago 2026)
+## Cambio del 13 oct 2026 — la IA solo escribe la historia
 
-Todo lo descrito en este documento ya está implementado y probado, en la rama
-`feature/retos-ia-persona2` (todavía sin PR/merge a `main`):
+Aplicando la guía del ingeniero (`docs/Guía WISPR retos variados y dificultad adaptativa.pdf`).
+Con 2 técnicas posibles, pedirle a la IA el reto entero hacía que solo variara el texto y terminara
+repitiendo los ejemplos. El flujo actual es:
+
+```
+   El jugador resuelve un reto
+              │
+              ▼
+   Motor adaptativo (difficulty.py) ── reglas: 1.º-2.º intento sube, 3-6 se mantiene, 6+ fallos baja
+   decide TÉCNICA y NIVEL
+              │
+              ▼
+   Together AI · Llama 3.3 70B (ai_advisor.py)
+   recibe técnica + nivel + resumen técnico + escenario al azar + títulos ya vistos
+   devuelve SOLO {title, description, hint}
+              │  (texto no confiable)
+              ▼
+   ChallengeNarrative (Pydantic): largos, sin llaves, sin títulos repetidos
+              │ inválido / timeout / sin key / límite   │ válido
+              ▼                                          ▼
+     historia de plantilla  ───────────────────►  Backend genera la FLAG (secrets)
+                                                         │
+                                                         ▼
+                                     ChallengeSpec (Pydantic) — misma regla de siempre
+                                                         │
+                                                         ▼
+                                     Generador (challenge_generator.py) con los
+                                     parámetros del nivel → archivo PROPIO del jugador
+                                                         │
+                                                         ▼
+                                     Reto nuevo, solo para ese jugador (owner_id)
+                                     + su instancia (flag y archivo) en Supabase
+```
+
+El mismo flujo (desde la IA hacia abajo) se usa cuando **alguien pide un reto** eligiendo técnica,
+dificultad y escenario (`POST /api/challenges/generate`, formulario en el frontend): el estudiante
+recibe un reto de práctica solo para él (sin puntos) y el profesor/admin publica uno para todos los
+estudiantes, cada uno con su archivo y su flag. La flag no se puede elegir: quien la elige ya sabe
+la respuesta.
+
+Lo que sigue de este documento describe el diseño original (26 ago). Sigue valiendo la regla de
+seguridad (registro fijo de técnicas + validación antes de generar); lo que cambió es que la IA ya
+no decide la flag, la técnica ni la dificultad.
+
+---
+
+## Estado de implementación (26 ago 2026, histórico)
+
+Implementado y probado en ese momento en la rama `feature/retos-ia-persona2` (fusionada a `main` el
+7 oct):
 
 * ✅ `ChallengeSpec` (`app/schemas/challenge.py`) — schema completo, con el registro fijo de
   técnicas y validación de formato de flag.
@@ -18,10 +66,8 @@ Todo lo descrito en este documento ya está implementado y probado, en la rama
   probaron simulando el ataque real (recuperar la flag sin conocer la llave de antemano), no
   solo verificando que el código corre sin error.
 * ✅ Llamada a Together AI (`app/services/ai_advisor.py`) — probada con un cliente simulado.
-  **Pendiente:** probarla contra la API real (falta un `TOGETHER_API_KEY` real en `.env`), y
-  todavía no existe la lógica de "reintentar / usar reto estático de respaldo" que muestra el
-  diagrama más abajo cuando la IA devuelve algo inválido — hoy esa función simplemente
-  propaga el error.
+  **(13 oct)** El respaldo ya existe (plantillas). Falta una `TOGETHER_API_KEY` válida para
+  probarla contra la API real.
 * ❌ Subida a S3 — los archivos generados quedan en `challenges/generated/` (local, en
   `.gitignore`), todavía no se suben a S3. Es tarea pendiente separada (ver checkpoint en
   `CLAUDE.md`).

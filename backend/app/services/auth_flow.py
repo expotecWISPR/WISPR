@@ -146,10 +146,13 @@ def public_player(user: User, db: DbSession | None = None) -> dict:
     if db is not None:
         # Import local: estos servicios no dependen de auth_flow, pero así se
         # evita cargarlos en cada import de este módulo.
-        from app.services import lessons, scoring
+        from app.services import difficulty, lessons, scoring
 
         player.update(scoring.player_progress(db, user.id))
         player["lessonProgress"] = lessons.lesson_progress(db, user.id)
+        # Nivel recomendado por categoría (motor adaptativo, 13 oct). El
+        # frontend todavía no lo muestra; queda en /me para usarlo y probarlo.
+        player["levels"] = difficulty.player_levels(db, user.id)
     return player
 
 

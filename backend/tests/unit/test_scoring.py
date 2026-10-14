@@ -78,7 +78,11 @@ def test_flag_incorrecta_registra_el_intento_sin_puntos(db):
 
 def test_flag_correcta_suma_puntos_una_sola_vez(db):
     first = scoring.submit_flag(db, _user(db), "deauth", f"  {OK_FLAG}  ")  # con espacios: se recortan
-    assert first == {"ok": True, "challengeId": "deauth", "points": 120, "nextChallenge": None, "generationError": ""}
+    assert {k: first[k] for k in ("ok", "challengeId", "points", "generationError")} == {
+        "ok": True, "challengeId": "deauth", "points": 120, "generationError": ""}
+    # Siguiente reto (motor adaptativo): no quedan de "Deauth / DoS", así que
+    # el de otra categoría en el nivel calculado (Medium, por acertar al primer intento).
+    assert first["nextChallenge"]["id"] == "pmkid"
 
     second = scoring.submit_flag(db, _user(db), "deauth", OK_FLAG, source="terminal")
     assert second == {"ok": True, "duplicate": True, "challengeId": "deauth", "points": 120}

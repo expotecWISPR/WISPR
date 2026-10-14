@@ -1,0 +1,169 @@
+"""
+Crea retos NUEVOS con historia de la IA. Tres usos (`purpose`):
+
+  - "adaptive": el "laboratorio de continuación" que el frontend agrega a la
+    cola al resolver un reto (`nextChallenge`). Lo elige el motor adaptativo.
+    Solo para ese jugador, con puntos normales.
+  - "practice": un estudiante lo pide eligiendo técnica, dificultad y
+    escenario (POST /api/challenges/generate). Solo para él y SIN puntos: si
+    diera puntos, cualquiera podría pedir retos fáciles sin parar y subir en el
+    ranking resolviéndolos con un script.
+  - "class": un profesor/admin lo pide con los mismos parámetros. Lo ven TODOS
+    los estudiantes, con puntos normales, y cada uno recibe su propio archivo
+    y su propia flag la primera vez que lo abre (instances.py). (Los grupos
+    todavía viven solo en el prototipo Node; cuando se migren, se podrá
+    publicar para un grupo.)
+
+Quién decide qué (guía del ingeniero, 13 oct):
+  - técnica y nivel  -> el motor adaptativo (difficulty.py), es decir, el código
+  - parámetros       -> challenge_generator.py (XOR_LEVELS / WEP_LEVELS)
+  - flag             -> challenge_generator.generate_flag (`secrets`)
+  - título, historia y una pista -> la IA (ai_advisor.py), o una plantilla
+  - objetivo técnico, pista técnica y solución -> technique_info.py
+
+Antes de generar el archivo, todo pasa por ChallengeSpec (regla del
+pipeline: nada llega al generador sin validar).
+"""
+
+from __future__ import annotations
+
+import secrets
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session as DbSession
+
+from app.models.challenge import Challenge
+from app.models.submission import Solve, Submission
+from app.models.user import User
+from app.schemas.challenge import ChallengeSpec
+from app.services import ai_advisor, instances
+from app.services.challenge_generator import generate_flag
+from app.services.challenges import DIFFICULTY_POINTS, SPEC_DIFFICULTY
+from app.services.technique_info import LEVEL_TO_SPEC, TECHNIQUES, technique_level
+
+
+def recent_titles(db: DbSession, user_id: int, limit: int = 15) -> list[str]:
+    """Títulos que el jugador ya vio: sus retos generados y los que intentó hace poco."""
+    owned = db.scalars(
+        select(Challenge.title).where(Challenge.owner_id == user_id).order_by(Challenge.created_at.desc()).limit(limit)
+    )
+    tried = db.scalars(
+        select(Challenge.title).join(Submission, Submission.challenge_id == Challenge.id)
+        .where(Submission.user_id == user_id).order_by(Submission.created_at.desc()).limit(limit)
+    )
+    return list(dict.fromkeys([*owned, *tried]))[:limit]
+
+
+PURPOSES = ("adaptive", "practice", "class")
+# Niveles que se pueden pedir: las técnicas llegan hasta hard.
+REQUESTABLE_LEVELS = ("Foundation", "Medium", "Hard")
+# Un estudiante no puede acumular más de esto sin resolver (disco y base de datos).
+MAX_PENDING_PRACTICE = 5
+PENDING_ERROR = (f"Ya tienes {MAX_PENDING_PRACTICE} retos de práctica sin resolver. "
+                 "Resuelve alguno antes de pedir otro.")
+
+
+def options() -> dict:
+    """Lo que se puede elegir al pedir un reto (el formulario del frontend lo lee de acá)."""
+    return {
+        "techniques": [{"id": key, "name": info["name"], "category": info["label"]} for key, info in TECHNIQUES.items()],
+        "levels": list(REQUESTABLE_LEVELS),
+        "themes": [short for short, _ in ai_advisor.THEMES],
+    }
+
+
+def _pending_practice(db: DbSession, user_id: int) -> int:
+    return db.scalar(
+        select(func.count()).select_from(Challenge)
+        .outerjoin(Solve, (Solve.challenge_id == Challenge.id) & (Solve.user_id == user_id))
+        .where(Challenge.owner_id == user_id, Challenge.points == 0, Challenge.is_active.is_(True),
+               Solve.challenge_id.is_(None))
+    ) or 0
+
+
+def request_challenge(db: DbSession, user: User, body: dict) -> dict:
+    """
+    POST /api/challenges/generate: el usuario elige técnica, dificultad y
+    (opcional) escenario. Solo opciones de listas fijas, salvo el escenario,
+    que es texto corto validado. El estudiante recibe un reto de práctica; el
+    profesor/admin publica uno para todos (ver `purpose` arriba).
+    """
+    technique = str(body.get("technique") or "")
+    level = str(body.get("difficulty") or "")
+    if technique not in TECHNIQUES:
+        return {"ok": False, "error": "Elige una técnica de la lista."}
+    if level not in REQUESTABLE_LEVELS:
+        return {"ok": False, "error": "Elige una dificultad de la lista."}
+    try:
+        theme = ai_advisor.resolve_theme(body.get("theme"))
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    purpose = "class" if user.role in ("profesor", "admin") else "practice"
+    if purpose == "practice" and _pending_practice(db, user.id) >= MAX_PENDING_PRACTICE:
+        return {"ok": False, "error": PENDING_ERROR}
+    challenge, ai_error = create_challenge(db, user, technique, level, purpose=purpose, theme=theme)
+    return {"ok": True, "challenge": challenge, "purpose": purpose, "aiError": ai_error}
+
+
+def create_challenge(
+    db: DbSession,
+    user: User,
+    technique: str,
+    level: str,
+    purpose: str = "adaptive",
+    theme: tuple[str, str] | None = None,
+) -> tuple[Challenge, str]:
+    """
+    Crea el reto y, si es de un solo jugador, su instancia con archivo y flag
+    propios. `level` en el vocabulario del frontend (Foundation/Medium/Hard;
+    Expert se genera como Hard). `user` es quien lo pide. Devuelve (reto,
+    motivo si la IA no se pudo usar).
+    """
+    if purpose not in PURPOSES:
+        raise ValueError(f"purpose inválido: {purpose}")
+    difficulty = LEVEL_TO_SPEC[level]
+    label = SPEC_DIFFICULTY[difficulty]
+    info, texts = TECHNIQUES[technique], technique_level(technique, difficulty)
+    owner_id = None if purpose == "class" else user.id
+    narrative, source, ai_error = ai_advisor.generate_narrative(
+        technique, difficulty, avoid_titles=recent_titles(db, user.id), player_key=str(user.id), theme=theme
+    )
+
+    challenge_id = f"ai-{info['flag_prefix']}-{difficulty}-{secrets.token_hex(4)}"
+    spec = ChallengeSpec(
+        id=challenge_id,
+        difficulty=difficulty,
+        category=info["spec_category"],
+        description=narrative.description,
+        technique=technique,
+        flag=generate_flag(technique),
+        hint=narrative.hint,
+        solution=texts["solution"],
+    )
+    challenge = Challenge(
+        id=spec.id,
+        title=narrative.title,
+        category=info["label"],
+        kind=spec.technique,
+        difficulty=label,
+        points=0 if purpose == "practice" else DIFFICULTY_POINTS[label],
+        description=spec.description,
+        objective=texts["objective"],
+        flag="",  # la flag vive solo en la instancia del dueño
+        solution=spec.solution,
+        tools=list(info["tools"]),
+        hints=[spec.hint, texts["hint"]],
+        files=[{"name": f"{spec.id}.{texts['ext']}", "type": texts["ext"], "desc": texts["file_desc"]}],
+        generated=True,
+        generator=source,  # "ai" o "template": queda registrado de dónde salió la historia
+        owner_id=owner_id,
+    )
+    db.add(challenge)
+    db.flush()
+    if owner_id is not None:
+        # Su único jugador ya tiene archivo y flag. En "class" no: el profesor
+        # no juega, y cada estudiante recibe la suya al abrirlo.
+        instances.create(db, owner_id, challenge, spec)
+    db.commit()
+    return challenge, ai_error
