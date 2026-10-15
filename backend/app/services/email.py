@@ -34,13 +34,20 @@ logger = logging.getLogger("wispr.email")
 
 OUTBOX_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "outbox"
 
-_SUBJECT = "Tu código de verificación WISPR"
+def _subject(code: str) -> str:
+    """El código va en el asunto (14 oct): con un asunto fijo, Gmail juntaba
+    todos los correos (registro y cada login) en una sola conversación y era
+    fácil copiar un código viejo — que ya no sirve, porque cada login nuevo
+    invalida el anterior. Así cada correo es único y el código se ve en la
+    notificación sin abrirlo."""
+    return f"WISPR: tu código es {code}"
 
 
 def _body(code: str) -> str:
     return (
         f"Tu código de verificación es: {code}\n"
-        "Vence en 10 minutos. Si no solicitaste este registro, ignora este mensaje."
+        f"Vence en {settings.OTP_TTL_MINUTES} minutos y solo sirve el último código que te enviamos.\n"
+        "Si no fuiste tú, ignora este mensaje."
     )
 
 
@@ -61,7 +68,7 @@ def _deliver_dev_code(email: str, code: str, reason: str) -> EmailResult:
         import time
 
         file_path = OUTBOX_DIR / f"{int(time.time() * 1000)}-{safe_name}.txt"
-        file_path.write_text(f"Para: {email}\nAsunto: {_SUBJECT}\n\n{_body(code)}\n", encoding="utf-8")
+        file_path.write_text(f"Para: {email}\nAsunto: {_subject(code)}\n\n{_body(code)}\n", encoding="utf-8")
     except OSError as error:
         logger.error("No se pudo escribir el correo de desarrollo: %s", error)
     return EmailResult(ok=True, dev=True, code=code)
@@ -97,7 +104,7 @@ def send_verification_code(email: str, code: str) -> EmailResult:
         return _fallback(email, code, "Sin SMTP configurado.")
 
     message = EmailMessage()
-    message["Subject"] = _SUBJECT
+    message["Subject"] = _subject(code)
     message["From"] = settings.MAIL_FROM or settings.SMTP_USER
     message["To"] = email
     message.set_content(_body(code))

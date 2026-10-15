@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 13 de octubre de 2026.
+**Última actualización:** 14 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -577,8 +577,26 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     sobre el rediseño sin commit. Límite: 6 pedidos cada 10 min por persona.
   - Frontend (`WISPR-frontend/server.js`, 2 líneas): Node pide el catálogo con el token del jugador
     (para ver sus retos generados) y `ctf show` dice "única para tu cuenta" solo si lo es.
-  - **La `TOGETHER_API_KEY` de esta PC es inválida** (25 caracteres, Together responde 401): todo
-    se probó con plantillas. Falta poner una key real y probar las historias de la IA.
+  - ~~La `TOGETHER_API_KEY` de esta PC es inválida~~ **Resuelto el mismo 13 oct:** se puso una key
+    real y las historias de la IA funcionan (~2.5 s por historia).
+
+* **Víspera de la defensa (14 oct).** Login con MFA revisado de punta a punta (registro → código →
+  logout → login → código, pasando por Node como el navegador): funciona; el SMTP de Gmail acepta las
+  credenciales. Causa más probable del "código que no sirve": todos los correos tenían el **mismo
+  asunto**, Gmail los juntaba en una conversación y se copiaba un código viejo (cada login nuevo
+  invalida el anterior). **Arreglo:** el código va en el asunto (`WISPR: tu código es 123456`,
+  `app/services/email.py`). Otra causa posible: reiniciar FastAPI con un código pendiente (viven en
+  memoria). Cuentas de prueba creadas **a mano** en Supabase (no hay flujo para asignar rol):
+  `@profe_wispr` (profesor) y `@admin_wispr` (admin), con correos `alonsolopezarias.03+profe@` /
+  `+admin@gmail.com` (Gmail ignora lo que va tras el `+`, llegan al correo del dueño del repo).
+  - **Hallazgo:** los paneles de admin y profesor del frontend llaman a **17 rutas que FastAPI no
+    tiene** (solo existen en el prototipo Node): `/api/admin/players` (listar, eliminar, `bulk`,
+    `reset-password`, `lock`), `/api/admin/groups`, `/api/groups/*` (crear, `mine`, `members`,
+    `tasks`, `tasks/toggle`, `student`, `available-students`) y `/api/players/change-password`. En
+    modo conectado Node las reenvía a FastAPI → 404; la UI muestra "No se pudo cargar la lista de
+    cuentas" / "No se pudieron cargar tus grupos". Sí funcionan: login de ambos roles, "Crear un reto
+    con IA" del profesor y Rankings. **Decisión:** para la defensa (plan B) no se muestran esas
+    partes; se portan a FastAPI después (pendiente 7f).
 
 ## Pendiente (próximos pasos, en orden)
 
@@ -651,6 +669,11 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    "Progreso técnico"). Falta: (a) que el frontend avise al backend cuando el jugador abre una
    pista, para sumarla a las reglas; (b) mostrar en la UI el motivo del nivel (`reason` en
    `nextChallenge`, `levels` en `/me`); (c) Pandas/scikit-learn cuando haya datos reales de uso.
+7f. **Paneles de admin y profesor en FastAPI (después de la defensa del 15 oct, antes de EXPOTEC).**
+   Portar las 17 rutas de `WISPR-frontend/server.js` (~líneas 1670-1910) — ver "Víspera de la
+   defensa (14 oct)" en "Progreso técnico". Requiere tablas nuevas (grupos, miembros, tareas) +
+   migración Alembic. Con grupos en FastAPI, `POST /api/challenges/generate` podrá publicar un reto
+   para un grupo en vez de para todos los estudiantes.
 8. ~~Respaldo de `ai_advisor.py` si Together falla~~ ✅ Hecho (13 oct, plantillas). **Falta:** una
    `TOGETHER_API_KEY` válida en `backend/.env` y ver historias reales de la IA. El fine-tuning con
    LoRA queda fuera de esto; si se retoma, entrenar con `challenges/dataset/challenges_limpio.json`
