@@ -31,7 +31,7 @@ from app.api.players import _json_body, get_current_player, get_optional_player
 from app.core import rate_limit
 from app.db.session import get_db
 from app.models.user import User
-from app.services import challenge_factory, challenges, instances, lessons, scoring
+from app.services import challenge_factory, challenges, hints, instances, lessons, scoring
 
 router = APIRouter(tags=["challenges"])
 
@@ -45,7 +45,26 @@ def list_challenges(db: Session = Depends(get_db), player: User | None = Depends
     incluye además los retos que el motor adaptativo creó para ese jugador.
     """
     visible = challenges.list_active(db, player.id if player else None)
-    return {"ok": True, "challenges": [challenges.public_challenge(c) for c in visible]}
+    # Con sesión, las pistas que ese jugador ya abrió vienen con su texto (así
+    # Node las deja en active.json y `ctf hint` no las vuelve a pedir).
+    unlocked = hints.unlocked_by_challenge(db, player.id if player else None)
+    return {"ok": True, "challenges": [challenges.public_challenge(c, unlocked.get(c.id)) for c in visible]}
+
+
+@router.post("/challenges/{challenge_id}/hints/{index}")
+def unlock_hint(challenge_id: str, index: str, db: Session = Depends(get_db), player: User = Depends(get_current_player)):
+    """
+    Entrega una pista y la anota: si el reto no está resuelto, le resta puntos
+    al resolverlo (regla en app/services/hints.py). La usan el botón "Mostrar"
+    de la web y `ctf hint` de la terminal (vía Node). Pedirla de nuevo no la
+    cobra otra vez.
+    """
+    challenge = challenges.get_active(db, challenge_id, player.id)
+    if challenge is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": scoring.CHALLENGE_NOT_FOUND})
+    result = hints.unlock(db, player.id, challenge, index)
+    status = result.pop("status", 200)
+    return result if result["ok"] else JSONResponse(status_code=status, content=result)
 
 
 @router.get("/challenges/options")
@@ -99,7 +118,10 @@ async def activate_challenge(
     instances.get_or_create(db, player.id, challenge)
     return {
         "ok": True,
-        "challenge": {**challenges.public_challenge(challenge), "directory": "/workspace/challenge"},
+        "challenge": {
+            **challenges.public_challenge(challenge, hints.unlocked_by_challenge(db, player.id).get(challenge.id)),
+            "directory": "/workspace/challenge",
+        },
         "lab": {"ok": False, "error": TERMINAL_UNAVAILABLE},
         "target": {"ok": False, "optional": True},
     }

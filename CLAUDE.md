@@ -243,7 +243,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 14 de octubre de 2026.
+**Última actualización:** 20 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -598,6 +598,101 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     con IA" del profesor y Rankings. **Decisión:** para la defensa (plan B) no se muestran esas
     partes; se portan a FastAPI después (pendiente 7f).
 
+* **Paneles de admin y profesor en FastAPI — pendiente 7f (20 oct).** Las 17 rutas que daban 404
+  ya existen, con el contrato exacto del prototipo: `app/api/admin.py` (`/api/admin/players`,
+  `DELETE`, `bulk`, `reset-password`, `lock`, `/api/admin/groups`), `app/api/groups.py`
+  (`/api/groups/*`) y `POST /api/players/change-password`. Lógica en `app/services/admin.py` y
+  `app/services/groups.py`. Migración `8f1d3c6a2b47` **aplicada a Supabase** (`alembic check` sin
+  diferencias): tablas `groups`, `group_members` (PK grupo+estudiante), `group_tasks` y columna
+  `users.lock_reason`. Decisiones:
+  - El admin/profesor sale de la **sesión**; el `playerId` del frontend se ignora (el prototipo
+    confiaba en él: cualquiera con el id de un admin actuaba como admin).
+  - Contraseña nueva: mismas reglas del registro (mín. 8), vía `auth_flow.password_error`. Al
+    cambiarla se cierran las **otras** sesiones del jugador; la del dispositivo actual sigue.
+  - Bloquear cierra las sesiones; la terminal la cierra Node solo (revisa cada 60 s).
+  - Borrar una cuenta: la base limpia en cascada sesiones, envíos, aciertos, lecciones, retos
+    propios y membresías. Los grupos de un profesor borrado se conservan sin dueño
+    ("(profesor eliminado)"). Se borran también sus archivos en `challenges/generated/instances/<id>`.
+  - Sin historial `security` por cuenta (el frontend no lo muestra): se devuelve `[]`.
+  - Una tarea solo puede ligarse a un reto que vean todos (`owner_id` NULL).
+  - CORS ahora permite `DELETE`.
+  - 189 tests (16 nuevos, con llaves foráneas activadas en SQLite para probar las cascadas). Prueba
+    manual contra Supabase real pasando por Node: listar cuentas, 403 al profesor, crear grupo,
+    agregar estudiante, detalle, tarea, borrar grupo; datos de prueba borrados. Borrar, bloquear y
+    resetear cuentas **solo se probó en los tests** (no se tocaron cuentas reales).
+* **Pistas que cuestan puntos — pendiente 7e(a) (20 oct).** Hallazgo: las pistas NO estaban
+  bloqueadas de verdad — su texto viajaba al navegador y a `/workspace/active.json` de la terminal;
+  "Mostrar" solo las ocultaba. Ahora:
+  - `public_challenge` manda las pistas cerradas como `""` (más `unlockedHints` y `hintCost`). El
+    texto se pide con `POST /api/challenges/{id}/hints/{n}` y queda en la tabla nueva
+    `hint_unlocks` (migración `b3e9a7d41c20`, **aplicada**). Lógica en `app/services/hints.py`.
+  - Cada pista abierta **antes** de resolver resta el **10 %** de los puntos del reto
+    (`HINT_PENALTY_RATE`, ej. 200 pts con 2 pistas → 160). Después de resolver: gratis. Ranking,
+    `/me` y grupos usan los puntos ya descontados (salen de `solves.points`).
+  - Dificultad adaptativa: cada pista antes de resolver cuenta como un intento más.
+  - Web (`WISPR-frontend/app.js`): "Mostrar (−N pts)" con confirmación; `app.hints` se sincroniza
+    desde `/me`. Terminal: `ctf hint` pide confirmación y pide la pista por un puente de archivos
+    (`hint-requests.ndjson` → Node → FastAPI → `hint-results.ndjson`), igual que `ctf submit`.
+    Sin FastAPI (prototipo Node solo) todo sigue como antes. Imagen de Kali reconstruida.
+  - 195 tests (6 nuevos). Probado de punta a punta con **Docker real**: un jugador temporal abrió
+    Kali por WebSocket, `active.json` sin textos, `ctf hint` cobró 20 pts y quedó anotado en
+    Supabase. Jugador, contenedores y workspace de prueba borrados.
+* **Teoría · Módulo 2 «Seguridad Wi-Fi» (20 oct) — solo frontend (`WISPR-frontend`).** 5 temas
+  (WEP, WPA y WPA2, WPA3, Cifrado, Autenticación) con Aprender → Practicar → Quiz + misión
+  «Operación: Red Segura» (insignia «Guardián Wi-Fi»), sobre el mismo motor de lecciones de los
+  módulos 1, 3 y 5 (`moduleMissions[2]`, motor `steps-mission`). Componentes nuevos: `m2-flow`,
+  `m2-cipher`, práctica `m2-decisions`. El backend **no cambió**: el progreso viaja por
+  `POST /api/progress` como el resto. Recorrido completo probado en Chromium (Playwright) con un
+  estudiante temporal: todas las actividades, feedback, XP guardado en Supabase, sin XP duplicado y
+  sin desborde a 390 px. Estudiante borrado al terminar.
+* **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
+  `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
+  tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
+  **Session Pooler** (`aws-0-ca-central-1.pooler.supabase.com:5432`, usuario `postgres.<ref>`).
+  Para distinguirlo: `nslookup db.<ref>.supabase.co` responde solo una IP `2600:…` → es esto.
+
+## ▶ RETOMAR AQUÍ (cierre de la sesión del 20 oct)
+
+Todo lo del 20 oct quedó con **push en `main`** de los dos repos (`WISPR` y `WISPR-frontend`).
+EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
+
+1. **App de escritorio con Electron — FALTA y es parte del objetivo** ("aplicación de
+   escritorio"). `electron/main/index.js`, `electron/preload/index.js`,
+   `electron/main/ipcHandlers.js` y `electron/package.json` existen pero están **vacíos (0 bytes)**.
+   Propuesta acordada: una ventana mínima (~30-50 líneas) que abre la URL del servidor (EC2); toda
+   la lógica sigue en el servidor (encaja con la arquitectura centralizada). Sin `nodeIntegration`,
+   con `contextIsolation`. Confirmar con el equipo si lo hace el backend o el frontend.
+2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
+   usar el Session Pooler de Supabase (ver "Conexión a Supabase por IPv4"); (b) `alembic upgrade
+   head` (hay 2 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`); (c) construir la imagen de Kali
+   **desde cero** (ver 7d); (d) arrancar Node desde una consola real o como servicio (en Windows,
+   Node sin consola se cae con `AttachConsole failed` al cerrar una terminal — no afecta a Linux).
+3. **Ensayo completo de la demo** en la máquina final: registro → retos → terminal (`ctf hint`,
+   `ctf submit`) → profesor (grupos, tareas) → admin (cuentas, bloqueo, reset) → teoría.
+4. **Alinear lo que dice este archivo con lo que hay de verdad** (para la defensa, que no pregunten
+   algo que no existe):
+   | Dice el proyecto | Realidad (20 oct) |
+   |---|---|
+   | Llama 3.3 ajustado con LoRA | Modelo base + prompting (LoRA en pausa desde el 7 oct) |
+   | Pandas / scikit-learn | Dificultad adaptativa por reglas (`difficulty.py`); sin Pandas |
+   | seccomp / AppArmor | Perfiles **por defecto** de Docker + `--cap-drop ALL`, `no-new-privileges`, `--read-only`, límites de memoria/CPU/procesos, red interna |
+   | Docker Compose | `docker-compose.yml` vacío; los contenedores los crea Node |
+   | CloudWatch | Sin configurar (parte del despliegue) |
+5. **Teoría: Módulos 4 (Ataques a Wi-Fi) y 6 (Análisis) los escribe el equipo.** El asistente NO
+   puede generar ese contenido (un filtro de seguridad cortó los intentos del 20 oct; no reintentar
+   reformulando). Sí puede revisar el código cuando el equipo lo escriba y probarlo en el navegador.
+   Guía del formato: `WISPR-frontend/docs/MODULOS-TEORIA.md`. Mientras tanto se ven como texto plano.
+6. Después de EXPOTEC: 7e(b) mostrar en la UI el motivo del nivel; reto de profesor para un grupo
+   (7f); S3 (9); archivos Wi-Fi por jugador (7c); Pandas (7e c); LoRA (8).
+
+**Cómo arrancar en local (PC Windows):** `backend\.env` ya existe en esa PC (no viaja con Git).
+Terminal 1: `cd backend` → `venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000`.
+Terminal 2: `cd ..\WISPR-frontend` → `node server.js`. Abrir http://127.0.0.1:8787. Docker Desktop
+abierto para la terminal Kali. Cuentas de prueba: `admin_wispr` y `profe_wispr` (el 20 oct se
+les emitieron contraseñas temporales que obligan a cambiarlas al entrar; nunca se guardan en el
+repo. Si nadie las recuerda: emitir otra con `app.services.admin.reset_password`). Los códigos MFA
+del profesor llegan a `expociber202510@gmail.com`.
+
 ## Pendiente (próximos pasos, en orden)
 
 1. ~~Implementar `app/core/config.py`~~ ✅ Hecho.
@@ -649,6 +744,12 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 7d. ~~Conectar la terminal Kali (Node) con FastAPI~~ ✅ Hecho (12 oct) — ver "Progreso técnico".
    Falta: probarlo con **Docker real** (computadora con Docker Desktop o la EC2) y un ensayo completo
    de la demo en esa máquina.
+   - ⚠️ **Node solo construye la imagen de Kali si NO existe** (20 oct). Si ya hay una vieja, la
+     sigue usando aunque `kali/` haya cambiado. Pasó en la PC Windows: imagen de 5 semanas sin
+     `/etc/wispr.bashrc` (todo el texto en blanco) y con un `ctf` viejo sin `hint`. Tras cambiar
+     `kali/`: `docker build --tag wispr-ctf-kali:local --file kali/Dockerfile .` desde
+     `WISPR-frontend` (~25 min la primera vez) y `docker rm -f` de los contenedores `wispr-kali-*`
+     (Node los vuelve a crear). Se agregaron también colores de `ls`/`grep` a `kali/wispr.bashrc`.
    - ⚠️ **En cada computadora nueva (y en la EC2), correr el seed antes de abrir la terminal:**
      `python -m app.db.seed_challenges` desde `backend/`. Los archivos de los retos del pipeline
      (`network-wep-01.pcap`, `crypto-xor-01.bin`) se generan en `challenges/generated/`, que está
@@ -666,14 +767,12 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    web/terminal (`submissions`), primer acierto y puntos (`solves`), intentos y progreso de
    lecciones (`lesson_progress`).
    **Actualizado 13 oct:** la dificultad adaptativa ya funciona con reglas (`difficulty.py`, ver
-   "Progreso técnico"). Falta: (a) que el frontend avise al backend cuando el jugador abre una
-   pista, para sumarla a las reglas; (b) mostrar en la UI el motivo del nivel (`reason` en
+   "Progreso técnico"). Falta: ~~(a) que el frontend avise al backend cuando el jugador abre una
+   pista~~ ✅ Hecho (20 oct, pistas con costo — ver "Progreso técnico"); (b) mostrar en la UI el motivo del nivel (`reason` en
    `nextChallenge`, `levels` en `/me`); (c) Pandas/scikit-learn cuando haya datos reales de uso.
-7f. **Paneles de admin y profesor en FastAPI (después de la defensa del 15 oct, antes de EXPOTEC).**
-   Portar las 17 rutas de `WISPR-frontend/server.js` (~líneas 1670-1910) — ver "Víspera de la
-   defensa (14 oct)" en "Progreso técnico". Requiere tablas nuevas (grupos, miembros, tareas) +
-   migración Alembic. Con grupos en FastAPI, `POST /api/challenges/generate` podrá publicar un reto
-   para un grupo en vez de para todos los estudiantes.
+7f. ~~Paneles de admin y profesor en FastAPI~~ ✅ Hecho (20 oct) — ver "Progreso técnico". Falta:
+   probarlo con la UI real (admin y profesor) y, si se quiere, que `POST /api/challenges/generate`
+   publique un reto para **un grupo** en vez de para todos los estudiantes.
 8. ~~Respaldo de `ai_advisor.py` si Together falla~~ ✅ Hecho (13 oct, plantillas). **Falta:** una
    `TOGETHER_API_KEY` válida en `backend/.env` y ver historias reales de la IA. El fine-tuning con
    LoRA queda fuera de esto; si se retoma, entrenar con `challenges/dataset/challenges_limpio.json`
@@ -682,6 +781,9 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.
 10. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
+11. **App de escritorio con Electron** (detectado el 20 oct: la carpeta `electron/` está vacía) —
+    ver "RETOMAR AQUÍ".
+12. **Teoría, Módulos 4 y 6** — contenido a cargo del equipo (ver "RETOMAR AQUÍ").
 
 ---
 

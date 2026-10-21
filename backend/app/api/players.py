@@ -28,7 +28,7 @@ from app.core.rate_limit import limit_per_ip
 from app.core.sessions import create_session, resolve_session, revoke_session
 from app.db.session import get_db
 from app.models.user import User
-from app.services import auth_flow
+from app.services import admin, auth_flow
 from app.services.email import send_verification_code
 
 router = APIRouter(tags=["players"])
@@ -187,6 +187,20 @@ async def login_resend(request: Request, db: Session = Depends(get_db)):
 @router.get("/me")
 def me(current_player: User = Depends(get_current_player), db: Session = Depends(get_db)):
     return {"ok": True, "player": auth_flow.public_player(current_player, db)}
+
+
+@router.post("/change-password", dependencies=[_AUTH_LIMIT])
+async def change_password(
+    request: Request, current_player: User = Depends(get_current_player), db: Session = Depends(get_db)
+):
+    """El propio jugador cambia su contraseña (obligatorio tras un reset del
+    admin). Sus otras sesiones se cierran; la de este dispositivo sigue."""
+    body = await _json_body(request)
+    result = admin.change_password(
+        db, current_player, body.get("currentPassword"), body.get("newPassword"), _bearer_token(request)
+    )
+    status = result.pop("status", 400)
+    return result if result["ok"] else JSONResponse(status_code=status, content=result)
 
 
 @router.post("/logout")

@@ -13,9 +13,9 @@ reales de uso; para el MVP alcanza con esta tabla.
     Más de 5 intentos fallidos (resuelto o no)       baja un nivel
     Ya está en el nivel más alto o más bajo          se queda ahí
 
-"Intentos fallidos" sale de la tabla `submissions`. Diferencias con la guía,
-anotadas en CLAUDE.md: (1) el uso de pistas todavía no se cuenta, porque el
-frontend no le avisa al backend cuando el jugador abre una; (2) el nivel no se
+"Intentos fallidos" sale de la tabla `submissions`, y desde el 20 oct cada
+pista abierta antes de resolver (`hint_unlocks`) cuenta como un intento más.
+Diferencia con la guía, anotada en CLAUDE.md: el nivel no se
 guarda en una tabla aparte: se calcula por categoría a partir del historial
 (`player_levels`), así nunca queda desincronizado de lo que pasó de verdad.
 
@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.models.challenge import Challenge
 from app.models.submission import Solve, Submission
 from app.models.user import User
-from app.services import challenge_factory, challenges
+from app.services import challenge_factory, challenges, hints
 from app.services.technique_info import TECHNIQUES
 
 LEVELS = ["Foundation", "Medium", "Hard", "Expert"]
@@ -62,15 +62,22 @@ def failed_attempts(db: DbSession, user_id: int, challenge_id: str) -> int:
 def recommend_level(db: DbSession, user_id: int, challenge: Challenge, solved: bool = True) -> tuple[str, str]:
     """(nivel siguiente, explicación en español) según la tabla de reglas."""
     fails = failed_attempts(db, user_id, challenge.id)
+    # Cada pista abierta antes de resolver cuenta como un intento más (20 oct):
+    # resolver "al primer intento" con dos pistas no es lo mismo que sin ayuda.
+    used = hints.hints_before_solve(db, user_id, challenge)
+    effective = fails + used
+    with_hints = f" y {used} pista{'s' if used != 1 else ''}" if used else ""
     current = _index(challenge.difficulty)
-    if fails >= STUCK_FAILS:
-        delta, why = -1, f"necesitaste {fails} intentos fallidos en «{challenge.title}»"
+    if effective >= STUCK_FAILS:
+        delta, why = -1, f"necesitaste {fails} intentos fallidos{with_hints} en «{challenge.title}»"
     elif not solved:
         delta, why = 0, f"todavía estás trabajando en «{challenge.title}»"
-    elif fails <= 1:
+    elif effective <= 1 and not used:
         delta, why = 1, f"resolviste «{challenge.title}» al {'primer' if fails == 0 else 'segundo'} intento"
+    elif effective <= 1:
+        delta, why = 1, f"resolviste «{challenge.title}» al primer intento con 1 pista"
     else:
-        delta, why = 0, f"resolviste «{challenge.title}» con {fails + 1} intentos"
+        delta, why = 0, f"resolviste «{challenge.title}» con {fails + 1} intento{'s' if fails else ''}{with_hints}"
 
     target = min(max(current + delta, 0), len(LEVELS) - 1)
     level = LEVELS[target]

@@ -112,6 +112,16 @@ def role_for_email(email: str) -> str | None:
     return None
 
 
+def password_error(password: str) -> str | None:
+    """Mensaje de error si la contraseña no cumple las reglas, o None si sirve.
+    Lo usan el registro y el cambio de contraseña (app/services/admin.py)."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres."
+    if len(password) > MAX_PASSWORD_LENGTH or len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        return f"La contraseña no puede tener más de {MAX_PASSWORD_LENGTH} caracteres."
+    return None
+
+
 def generate_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
@@ -224,10 +234,8 @@ def begin_registration(data: dict, db: DbSession) -> dict:
         return {"ok": False, "error": "El usuario debe tener al menos 2 caracteres válidos."}
     if gender not in GENDERS:
         return {"ok": False, "error": "Selecciona un género."}
-    if len(password) < MIN_PASSWORD_LENGTH:
-        return {"ok": False, "error": f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres."}
-    if len(password) > MAX_PASSWORD_LENGTH or len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
-        return {"ok": False, "error": f"La contraseña no puede tener más de {MAX_PASSWORD_LENGTH} caracteres."}
+    if error := password_error(password):
+        return {"ok": False, "error": error}
     if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_RE.match(email):
         return {"ok": False, "error": "Escribe un correo válido."}
 

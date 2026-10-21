@@ -40,13 +40,15 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Cuenta creada por un admin con contraseña temporal: debe cambiarla al
-    # entrar. Sin flujo de admin todavía, pero se deja el campo listo.
+    # Un admin le emitió una contraseña temporal: debe cambiarla al entrar
+    # (ver app/services/admin.py y POST /api/players/change-password).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Bloqueo manual (lo marca un admin) vs. automático (fuerza bruta, ver
     # recordFailedLogin en el prototipo): distintos del `is_active` general.
     locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Motivo del bloqueo manual, opcional; el panel admin lo muestra.
+    lock_reason: Mapped[str] = mapped_column(String(200), default="", server_default="", nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_login_window_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

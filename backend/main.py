@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
+from app.api.admin import router as admin_router
 from app.api.challenges import router as challenges_router
+from app.api.groups import router as groups_router
 from app.api.players import AuthRequiredError
 from app.core.rate_limit import RateLimitExceeded, too_many_response
 from app.api.players import router as players_router
@@ -81,7 +83,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()],
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    # DELETE: el panel admin y los grupos borran cuentas, grupos, miembros y tareas.
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -90,6 +93,10 @@ app.add_middleware(
 # app/api/players.py y app/api/challenges.py). /api/v1/*: queda para
 # endpoints futuros que no vienen de esa migración.
 app.include_router(players_router, prefix="/api/players")
+# Paneles de admin y profesor (20 oct, pendiente 7f): antes solo existían en
+# el prototipo Node, y en modo conectado daban 404.
+app.include_router(admin_router, prefix="/api/admin")
+app.include_router(groups_router, prefix="/api/groups")
 app.include_router(challenges_router, prefix="/api")
 app.include_router(api_router, prefix="/api/v1")
 

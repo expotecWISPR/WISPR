@@ -89,8 +89,14 @@ def revoke_session(db: DbSession, token: str) -> None:
     db.commit()
 
 
-def revoke_user_sessions(db: DbSession, user_id: int) -> None:
-    """Revoca TODAS las sesiones de un usuario — logout global: se usa al
-    bloquear una cuenta, eliminarla o resetear su contraseña."""
-    db.execute(delete(SessionModel).where(SessionModel.user_id == user_id))
+def revoke_user_sessions(db: DbSession, user_id: int, keep_token: str = "") -> int:
+    """Revoca las sesiones de un usuario — logout global: se usa al bloquear
+    una cuenta, eliminarla o resetear su contraseña. Con `keep_token`, deja
+    viva solo esa (al cambiar la contraseña, se cierran los OTROS
+    dispositivos pero no el que hizo el cambio). Devuelve cuántas cerró."""
+    statement = delete(SessionModel).where(SessionModel.user_id == user_id)
+    if keep_token:
+        statement = statement.where(SessionModel.token_hash != hash_token(keep_token))
+    closed = db.execute(statement).rowcount or 0
     db.commit()
+    return closed

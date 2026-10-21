@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.models.challenge import Challenge
 from app.schemas.challenge import ChallengeSpec
-from app.services import instances
+from app.services import hints, instances
 from app.services.technique_info import TECHNIQUES, technique_level
 
 CHALLENGES_DIR = Path(__file__).resolve().parents[3] / "challenges"
@@ -37,7 +37,14 @@ DIFFICULTY_POINTS = {"Foundation": 120, "Medium": 200, "Hard": 340, "Expert": 50
 SPEC_DIFFICULTY = {"easy": "Foundation", "medium": "Medium", "hard": "Hard"}
 
 
-def public_challenge(challenge: Challenge) -> dict:
+def public_challenge(challenge: Challenge, unlocked_hints: list[int] | None = None) -> dict:
+    """
+    `unlocked_hints`: índices de las pistas que el jugador ya abrió. Las demás
+    salen como "" (el frontend muestra "Pista N bloqueada"): su texto solo se
+    entrega con POST /api/challenges/{id}/hints/{n}, que cobra la pista
+    (ver app/services/hints.py).
+    """
+    unlocked = set(unlocked_hints or [])
     return {
         "id": challenge.id,
         "title": challenge.title,
@@ -48,7 +55,10 @@ def public_challenge(challenge: Challenge) -> dict:
         "description": challenge.description,
         "objective": challenge.objective,
         "tools": list(challenge.tools or []),
-        "hints": list(challenge.hints or []),
+        "hints": [text if index in unlocked else "" for index, text in enumerate(challenge.hints or [])],
+        "unlockedHints": sorted(i for i in unlocked if i < len(challenge.hints or [])),
+        # Puntos que resta cada pista abierta antes de resolver el reto.
+        "hintCost": hints.cost_per_hint(challenge),
         "files": [{"name": f["name"], "type": f.get("type"), "desc": f.get("desc")} for f in challenge.files or []],
         "generated": bool(challenge.generated),
         "generator": challenge.generator or "curriculum",

@@ -29,7 +29,7 @@ from app.core.time_utils import as_utc
 from app.models.challenge import Challenge
 from app.models.submission import Solve, Submission
 from app.models.user import User
-from app.services import challenges, difficulty, flag_validator
+from app.services import challenges, difficulty, flag_validator, hints
 
 log = logging.getLogger(__name__)
 
@@ -83,9 +83,13 @@ def submit_flag(db: DbSession, user: User, challenge_id: str, flag: str, source:
         db.commit()
         return {"ok": False, "challengeId": challenge.id}
 
-    if db.get(Solve, (user.id, challenge.id)) is not None:
+    existing = db.get(Solve, (user.id, challenge.id))
+    if existing is not None:
         db.commit()
-        return {"ok": True, "duplicate": True, "challengeId": challenge.id, "points": challenge.points}
+        return {"ok": True, "duplicate": True, "challengeId": challenge.id, "points": existing.points}
+
+    # Cada pista abierta antes de este acierto resta puntos (app/services/hints.py).
+    points = hints.points_after_hints(db, user.id, challenge)
 
     # Si llegan dos envíos correctos a la vez (dos pestañas, web + terminal),
     # los dos pueden pasar el chequeo de arriba. La clave primaria de `solves`
@@ -94,16 +98,17 @@ def submit_flag(db: DbSession, user: User, challenge_id: str, flag: str, source:
     # (begin_nested) permite deshacer solo el solve y conservar el Submission.
     try:
         with db.begin_nested():
-            db.add(Solve(user_id=user.id, challenge_id=challenge.id, points=challenge.points))
+            db.add(Solve(user_id=user.id, challenge_id=challenge.id, points=points))
     except IntegrityError:
         db.commit()
-        return {"ok": True, "duplicate": True, "challengeId": challenge.id, "points": challenge.points}
+        return {"ok": True, "duplicate": True, "challengeId": challenge.id, "points": points}
 
     db.commit()
     return {
         "ok": True,
         "challengeId": challenge.id,
-        "points": challenge.points,
+        "points": points,
+        "hintPenalty": (challenge.points or 0) - points,
         **_next_challenge(db, user, challenge),
     }
 
@@ -125,7 +130,7 @@ def current_streak(db: DbSession, user_id: int) -> int:
 
 
 def player_progress(db: DbSession, user_id: int) -> dict:
-    """`solved`, `attempts` y `submissions` con la forma de `publicPlayer()`."""
+    """`solved`, `attempts`, `submissions` y `hints` con la forma de `publicPlayer()`."""
     solved = {
         solve.challenge_id: {"time": _ms(solve.solved_at), "points": solve.points}
         for solve in db.scalars(select(Solve).where(Solve.user_id == user_id))
@@ -148,7 +153,9 @@ def player_progress(db: DbSession, user_id: int) -> dict:
         {"id": sub.challenge_id, "title": title, "ok": sub.correct, "time": _ms(sub.created_at), "source": sub.source}
         for sub, title in recent
     ]
-    return {"solved": solved, "attempts": attempts, "submissions": submissions}
+    # Pistas abiertas por reto, con la forma de `app.hints` del frontend.
+    return {"solved": solved, "attempts": attempts, "submissions": submissions,
+            "hints": hints.unlocked_by_challenge(db, user_id)}
 
 
 def ranking(db: DbSession, current_user_id: int | None) -> list[dict]:
