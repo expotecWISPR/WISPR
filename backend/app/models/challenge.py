@@ -76,6 +76,12 @@ class Challenge(Base):
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    # Para qué se creó un reto generado (challenge_factory.PURPOSES):
+    # "adaptive" (siguiente reto del motor), "practice" (lo pidió el
+    # estudiante) o "class" (lo publicó un profesor). None = catálogo. Antes
+    # (hasta el 22 oct) "práctica" se reconocía por tener 0 puntos, pero desde
+    # entonces la práctica también da puntos (con rendimiento decreciente).
+    purpose: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False

@@ -1,0 +1,10 @@
+{
+  "id": "network-http-01",
+  "difficulty": "easy",
+  "category": "network",
+  "description": "El equipo de redes capturó el tráfico de un formulario de la intranet que todavía usa HTTP, sin HTTPS. Analiza la captura y recupera lo que se envió.",
+  "technique": "http_plaintext_pcap",
+  "flag": "WISPR{plantilla_http_plaintext_pcap}",
+  "hint": "Sin TLS, el cuerpo de una petición POST viaja completo y legible.",
+  "solution": "Filtrar http.request.method == \"POST\" y leer el campo «mensaje» del cuerpo JSON: es la flag."
+}

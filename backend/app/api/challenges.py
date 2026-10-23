@@ -31,7 +31,7 @@ from app.api.players import _json_body, get_current_player, get_optional_player
 from app.core import rate_limit
 from app.db.session import get_db
 from app.models.user import User
-from app.services import challenge_factory, challenges, hints, instances, lessons, scoring
+from app.services import bonus, challenge_factory, challenges, hints, instances, lessons, scoring
 
 router = APIRouter(tags=["challenges"])
 
@@ -48,7 +48,28 @@ def list_challenges(db: Session = Depends(get_db), player: User | None = Depends
     # Con sesión, las pistas que ese jugador ya abrió vienen con su texto (así
     # Node las deja en active.json y `ctf hint` no las vuelve a pedir).
     unlocked = hints.unlocked_by_challenge(db, player.id if player else None)
-    return {"ok": True, "challenges": [challenges.public_challenge(c, unlocked.get(c.id)) for c in visible]}
+    timers = bonus.timers_by_challenge(db, player.id if player else None)
+    return {
+        "ok": True,
+        "challenges": [challenges.public_challenge(c, unlocked.get(c.id), timers.get(c.id)) for c in visible],
+        # Reglas de bonos y penalizaciones (bonus.py) y la hora del servidor:
+        # el cronómetro del navegador se sincroniza con ella.
+        "scoring": bonus.RULES,
+        "serverNow": bonus.now_ms(),
+    }
+
+
+@router.post("/challenges/{challenge_id}/start")
+def start_challenge(challenge_id: str, db: Session = Depends(get_db), player: User = Depends(get_current_player)):
+    """
+    Arranca el cronómetro del reto (la primera vez; después devuelve la misma
+    hora). Lo llama el frontend al abrir el detalle de un reto o su terminal.
+    """
+    challenge = challenges.get_active(db, challenge_id, player.id)
+    if challenge is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": scoring.CHALLENGE_NOT_FOUND})
+    started = bonus.start_timer(db, player.id, challenge)
+    return {"ok": True, "challengeId": challenge.id, "startedAt": bonus.to_ms(started), "serverNow": bonus.now_ms()}
 
 
 @router.post("/challenges/{challenge_id}/hints/{index}")
@@ -68,9 +89,10 @@ def unlock_hint(challenge_id: str, index: str, db: Session = Depends(get_db), pl
 
 
 @router.get("/challenges/options")
-def generation_options():
-    """Pública. Técnicas, niveles y escenarios que se pueden elegir al pedir un reto."""
-    return {"ok": True, **challenge_factory.options()}
+def generation_options(db: Session = Depends(get_db), player: User | None = Depends(get_optional_player)):
+    """Pública. Técnicas, niveles y escenarios que se pueden elegir al pedir un
+    reto; con sesión de estudiante, también cuánto valdría cada uno."""
+    return {"ok": True, **challenge_factory.options(db, player)}
 
 
 @router.post("/challenges/generate")
@@ -80,7 +102,8 @@ async def generate_challenge(
     """
     Pide un reto nuevo eligiendo técnica, dificultad y escenario. La IA escribe
     la historia; la flag y el archivo los genera el backend. Estudiante: reto de
-    práctica solo para él (sin puntos). Profesor/admin: reto para todos los
+    práctica solo para él (con puntos decrecientes al repetir la misma técnica
+    y nivel, ver challenge_factory.PRACTICE_DECAY). Profesor/admin: reto para todos los
     estudiantes. Ver app/services/challenge_factory.py.
     """
     # Cada pedido puede llamar a la IA (cuesta) y genera un archivo: 6 cada

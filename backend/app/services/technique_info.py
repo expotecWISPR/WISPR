@@ -98,6 +98,127 @@ TECHNIQUES = {
             },
         },
     },
+    # --- Técnicas agregadas el 22 oct ---------------------------------------
+    "caesar_vigenere": {
+        "name": "Cifrado César y Vigenère",
+        "spec_category": "crypto",
+        "label": "Criptografía clásica",
+        "flag_prefix": "clasico",
+        "tools": ["python3", "tr"],
+        "levels": {
+            "easy": {
+                "ext": "txt",
+                "file_desc": "Mensaje cifrado con ROT13",
+                "objective": "El mensaje está cifrado con ROT13: cada letra se desplazó 13 posiciones en el alfabeto. Los números, «_» y las llaves no cambian.",
+                "hint": "ROT13 se deshace aplicándolo otra vez: tr 'A-Za-z' 'N-ZA-Mn-za-m' < archivo.",
+                "solution": "1) Leer el archivo. 2) Desplazar cada letra 13 posiciones (tr 'A-Za-z' 'N-ZA-Mn-za-m'). 3) El resultado es la flag.",
+            },
+            "medium": {
+                "ext": "txt",
+                "file_desc": "Mensaje cifrado con César",
+                "objective": "El mensaje está cifrado con César con un desplazamiento desconocido (no es 13). Solo hay 25 desplazamientos posibles: pruébalos y quédate con el que produce un texto que empieza con WISPR{.",
+                "hint": "Un bucle de 1 a 25 en Python alcanza; también puedes calcular el desplazamiento comparando la primera letra con la W de WISPR.",
+                "solution": "1) Para cada desplazamiento s de 1 a 25, restar s a cada letra (mod 26). 2) El único que empieza con 'WISPR{' es la flag. Atajo: s = (letra cifrada − 'W') mod 26.",
+            },
+            "hard": {
+                "ext": "txt",
+                "file_desc": "Mensaje cifrado con Vigenère",
+                "objective": "El mensaje está cifrado con Vigenère: una llave de 3 a 5 letras que se repite (solo avanza con las letras). Probar desplazamientos de César ya no sirve. Sabes que las 5 primeras letras son WISPR: con eso recuperas la llave.",
+                "hint": "Cada letra de la llave = (letra cifrada − letra conocida) mod 26. Las 5 letras de WISPR te dan hasta 5 letras de llave: prueba largos de 3 a 5.",
+                "solution": "1) k[i] = (cifrado[i] − 'WISPR'[i]) mod 26 para las 5 primeras letras. 2) Para cada largo L de 3 a 5, repetir k[:L] sobre todas las letras (sin contar dígitos ni símbolos) y restar. 3) El largo correcto da 'WISPR{clasico_…}' legible.",
+            },
+        },
+    },
+    "encoding_layers": {
+        "name": "Capas de codificación (base64, hex, base32)",
+        "spec_category": "misc",
+        "label": "Codificación",
+        "flag_prefix": "enc",
+        "tools": ["base64", "base32", "xxd", "python3"],
+        "levels": {
+            "easy": {
+                "ext": "txt",
+                "file_desc": "Texto codificado",
+                "objective": "El texto está codificado en base64: no es un cifrado, no hay llave. Decodifícalo para recuperar la flag.",
+                "hint": "base64 usa letras, números, + y /, y a veces termina en =. Prueba: base64 -d archivo.",
+                "solution": "1) base64 -d archivo. 2) El resultado es la flag.",
+            },
+            "medium": {
+                "ext": "txt",
+                "file_desc": "Texto con dos capas de codificación",
+                "objective": "El texto tiene DOS capas de codificación distintas, elegidas entre base64, hex y base32. Reconoce cada capa por sus caracteres, decodifícala y repite hasta llegar a WISPR{.",
+                "hint": "hex: solo 0-9 y a-f. base32: solo mayúsculas, 2-7 y relleno =. base64: el resto (mayúsculas, minúsculas, +, /).",
+                "solution": "1) Mirar el alfabeto: hex → xxd -r -p; base32 → base32 -d; base64 → base64 -d. 2) Repetir con el resultado. 3) Tras 2 capas aparece la flag.",
+            },
+            "hard": {
+                "ext": "txt",
+                "file_desc": "Texto con varias capas de codificación",
+                "objective": "El texto tiene 3 o 4 capas de codificación (base64, hex y base32, en cualquier orden y nunca la misma dos veces seguidas). Reconoce y decodifica capa por capa hasta llegar a WISPR{.",
+                "hint": "Revisa siempre en este orden: ¿solo 0-9 a-f? → hex. ¿Solo A-Z, 2-7 y =? → base32. Si no, base64. Un script pequeño en Python lo automatiza.",
+                "solution": "1) En un bucle: si el texto es solo [0-9a-f] → hex; si es solo [A-Z2-7=] → base32; si no → base64. 2) Decodificar y repetir. 3) Parar cuando empiece con 'WISPR{'.",
+            },
+        },
+    },
+    "http_plaintext_pcap": {
+        "name": "Datos en HTTP sin cifrar dentro de una captura",
+        "spec_category": "network",
+        "label": "Análisis de tráfico",
+        "flag_prefix": "http",
+        "tools": ["wireshark", "tshark", "python3"],
+        "levels": {
+            "easy": {
+                "ext": "pcap",
+                "file_desc": "Captura con una petición HTTP",
+                "objective": "La captura tiene una petición HTTP POST sin cifrar (puerto 80). Como HTTP no usa TLS, el cuerpo de la petición se lee completo: ahí va la flag.",
+                "hint": "En Wireshark, filtra por http y abre el POST (sección «JavaScript Object Notation»). En tshark: -Y 'http.request.method == \"POST\"' -T fields -e json.value.string.",
+                "solution": "1) Filtrar 'http.request.method == \"POST\"'. 2) Leer el cuerpo JSON (en tshark, -e json.value.string): el campo «mensaje» es la flag.",
+            },
+            "medium": {
+                "ext": "pcap",
+                "file_desc": "Captura con tráfico HTTP de varios equipos",
+                "objective": "Entre muchas sesiones HTTP (páginas, búsquedas) hay un POST a /api/reportes con la flag en un formulario. El formulario va codificado en URL (las llaves viajan como %7B y %7D): buscar «WISPR{» en el archivo con strings no la encuentra. Hay que filtrar la petición correcta y leer sus campos.",
+                "hint": "Filtra con http.request.uri contains \"reportes\". Wireshark (sección «HTML Form URL Encoded») y tshark (-e urlencoded-form.value) ya decodifican el %7B a «{».",
+                "solution": "1) Filtrar 'http.request.uri contains \"reportes\"'. 2) Leer los campos del formulario (tshark -T fields -e urlencoded-form.key -e urlencoded-form.value). 3) El campo «mensaje» es la flag (a mano: %7B = «{», %7D = «}»).",
+            },
+            "hard": {
+                "ext": "pcap",
+                "file_desc": "Captura HTTP con varios reportes",
+                "objective": "Hay varios POST a /api/reportes con un campo «dato» en base64, pero solo uno es la flag; los demás son señuelos. La petición con la flag viaja partida en dos segmentos TCP: para leerla completa hay que reensamblar el flujo.",
+                "hint": "Wireshark y tshark reensamblan el flujo TCP solos (o usa «Follow TCP Stream»). Lista cada «dato» con -Y 'http.request.uri contains \"reportes\"' -T fields -e json.value.string y decodifícalos con base64 -d: solo uno empieza con WISPR{.",
+                "solution": "1) Filtrar los POST a /api/reportes (el que lleva la flag viene en 2 segmentos TCP; Wireshark lo reensambla). 2) Listar los «dato» (tshark -T fields -e json.value.string). 3) Decodificar cada uno con base64 -d. 4) El que empieza con 'WISPR{' es la flag.",
+            },
+        },
+    },
+    "stego_png": {
+        "name": "Esteganografía en imágenes PNG",
+        "spec_category": "stego",
+        "label": "Esteganografía",
+        "flag_prefix": "stego",
+        "tools": ["exiftool", "strings", "binwalk", "xxd", "python3"],
+        "levels": {
+            "easy": {
+                "ext": "png",
+                "file_desc": "Imagen PNG",
+                "objective": "La imagen guarda la flag en sus metadatos: un PNG puede llevar textos (chunks tEXt) que no se ven al abrirla.",
+                "hint": "exiftool imagen.png muestra los metadatos; strings imagen.png también sirve.",
+                "solution": "1) exiftool imagen.png (o strings). 2) El campo «Comment» es la flag.",
+            },
+            "medium": {
+                "ext": "png",
+                "file_desc": "Imagen PNG",
+                "objective": "Los metadatos son un señuelo. La flag está escondida DESPUÉS del final del PNG (el bloque IEND), codificada en base64: el visor de imágenes ignora todo lo que hay después.",
+                "hint": "Busca qué hay tras «IEND» con xxd o strings; lo que quede al final es base64.",
+                "solution": "1) xxd imagen.png | tail, o strings: tras 'IEND' hay una línea en base64. 2) base64 -d de esa línea da la flag.",
+            },
+            "hard": {
+                "ext": "png",
+                "file_desc": "Imagen PNG",
+                "objective": "La flag está en los píxeles: en el bit menos significativo (LSB) del canal ROJO, píxel por píxel de izquierda a derecha y de arriba abajo, 8 bits por carácter (el más significativo primero), terminada en un byte 0. Lo que hay tras el IEND es un señuelo.",
+                "hint": "Con Python y PIL: Image.open(...).convert('RGB'), recorre getdata() y junta (r & 1) de cada píxel en grupos de 8.",
+                "solution": "1) Abrir la imagen con PIL. 2) Para cada píxel en orden, tomar r & 1. 3) Agrupar los bits de a 8 (MSB primero) y convertir a bytes. 4) Cortar en el primer byte 0: es la flag.",
+            },
+        },
+    },
 }
 
 

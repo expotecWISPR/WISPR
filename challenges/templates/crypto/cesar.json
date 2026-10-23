@@ -1,0 +1,10 @@
+{
+  "id": "crypto-cesar-01",
+  "difficulty": "easy",
+  "category": "crypto",
+  "description": "En la pizarra del laboratorio apareció una nota que nadie entiende: las letras están corridas, pero los números y los símbolos siguen en su lugar. Descífrala y encuentra la flag.",
+  "technique": "caesar_vigenere",
+  "flag": "WISPR{plantilla_caesar_vigenere}",
+  "hint": "Cada letra se movió el mismo número de posiciones en el alfabeto.",
+  "solution": "Aplicar ROT13 (tr 'A-Za-z' 'N-ZA-Mn-za-m'): el resultado es la flag."
+}

@@ -22,7 +22,7 @@ from app.models.user import User
 from app.services import challenges, difficulty
 from main import app
 
-CHALLENGE = "deauth-storm-medium"  # 200 pts, 3 pistas → 20 pts cada una
+CHALLENGE = "deauth-storm-medium"  # 200 pts, 3 pistas → 30 pts cada una (15 %, bonus.HINT_PCT)
 
 
 def _catalog_entry(challenge_id):
@@ -86,7 +86,7 @@ def test_las_pistas_cerradas_no_salen_por_la_api(client):
     for who in (None, "Ana"):  # sin sesión y con sesión
         challenge = _challenge(client, who)
         assert challenge["hints"] == ["", "", ""]
-        assert challenge["unlockedHints"] == [] and challenge["hintCost"] == 20
+        assert challenge["unlockedHints"] == [] and challenge["hintCost"] == 30
         assert not any(text in json.dumps(challenge, ensure_ascii=False) for text in texts)
 
 
@@ -94,7 +94,7 @@ def test_abrir_una_pista_la_entrega_y_queda_anotada(client):
     texts = _catalog_entry(CHALLENGE)["hints"]
     data = _unlock(client, 1).json()
     assert data == {"ok": True, "challengeId": CHALLENGE, "index": 1, "hint": texts[1], "alreadyUnlocked": False,
-                    "cost": 20, "hintsUsed": 1, "pointsIfSolved": 180}
+                    "cost": 30, "hintsUsed": 1, "pointsIfSolved": 170}
     # Pedirla otra vez no la cobra de nuevo.
     again = _unlock(client, 1).json()
     assert again["alreadyUnlocked"] is True and again["cost"] == 0 and again["hintsUsed"] == 1
@@ -120,13 +120,13 @@ def test_cada_pista_resta_puntos_al_resolver(client):
     _unlock(client, 0)
     _unlock(client, 2)
     result = _solve(client)
-    assert result["ok"] is True and result["points"] == 160 and result["hintPenalty"] == 40
+    assert result["ok"] is True and result["points"] == 140 and result["breakdown"]["hints"]["points"] == -60
     me = client.get("/api/players/me", headers=client.tokens["Ana"]).json()["player"]
-    assert me["solved"][CHALLENGE]["points"] == 160
+    assert me["solved"][CHALLENGE]["points"] == 140
     ranking = {r["handle"]: r["score"] for r in client.get("/api/ranking", headers=client.tokens["Ana"]).json()["ranking"]}
-    assert ranking["@ana"] == 160
+    assert ranking["@ana"] == 140
     # Reenviar la flag devuelve los puntos que ganó de verdad.
-    assert _solve(client)["points"] == 160
+    assert _solve(client)["points"] == 140
 
     # Sin pistas, Beto gana los 200 completos.
     assert _solve(client, "Beto")["points"] == 200

@@ -26,7 +26,7 @@ no aporta nada (los intentos fallidos podrían contener cualquier cosa).
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -68,6 +68,11 @@ class Solve(Base):
     solved_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
+    # 22 oct (app/services/bonus.py): "limpio" = sin pistas ni intentos
+    # fallidos; alimenta la racha limpia. `breakdown` guarda el desglose de los
+    # puntos (base, pistas, intentos, velocidad, racha) para mostrarlo después.
+    clean: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    breakdown: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<Solve user_id={self.user_id} challenge_id={self.challenge_id!r} points={self.points}>"

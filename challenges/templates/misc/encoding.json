@@ -1,0 +1,10 @@
+{
+  "id": "misc-enc-01",
+  "difficulty": "easy",
+  "category": "misc",
+  "description": "Un compañero dejó en el foro del curso una cadena rara que termina en signos de igual. Dice que no está cifrada, solo codificada. Decodifícala y encuentra la flag.",
+  "technique": "encoding_layers",
+  "flag": "WISPR{plantilla_encoding_layers}",
+  "hint": "Los signos = al final son relleno típico de una codificación muy común.",
+  "solution": "base64 -d al archivo: el resultado es la flag."
+}

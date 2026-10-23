@@ -37,7 +37,7 @@ DIFFICULTY_POINTS = {"Foundation": 120, "Medium": 200, "Hard": 340, "Expert": 50
 SPEC_DIFFICULTY = {"easy": "Foundation", "medium": "Medium", "hard": "Hard"}
 
 
-def public_challenge(challenge: Challenge, unlocked_hints: list[int] | None = None) -> dict:
+def public_challenge(challenge: Challenge, unlocked_hints: list[int] | None = None, started_at: int | None = None) -> dict:
     """
     `unlocked_hints`: índices de las pistas que el jugador ya abrió. Las demás
     salen como "" (el frontend muestra "Pista N bloqueada"): su texto solo se
@@ -59,6 +59,8 @@ def public_challenge(challenge: Challenge, unlocked_hints: list[int] | None = No
         "unlockedHints": sorted(i for i in unlocked if i < len(challenge.hints or [])),
         # Puntos que resta cada pista abierta antes de resolver el reto.
         "hintCost": hints.cost_per_hint(challenge),
+        # Cuándo abrió el jugador este reto (ms), para su cronómetro; None si nunca.
+        "startedAt": started_at,
         "files": [{"name": f["name"], "type": f.get("type"), "desc": f.get("desc")} for f in challenge.files or []],
         "generated": bool(challenge.generated),
         "generator": challenge.generator or "curriculum",

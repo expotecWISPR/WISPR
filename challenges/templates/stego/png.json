@@ -1,0 +1,10 @@
+{
+  "id": "stego-png-01",
+  "difficulty": "easy",
+  "category": "stego",
+  "description": "Alguien compartió una foto del laboratorio de redes en el grupo del curso. Se ve normal, pero dicen que lleva un mensaje escondido. Analiza la imagen y encuentra la flag.",
+  "technique": "stego_png",
+  "flag": "WISPR{plantilla_stego_png}",
+  "hint": "Una imagen guarda más información que sus píxeles.",
+  "solution": "exiftool imagen.png: el campo «Comment» es la flag."
+}

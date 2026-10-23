@@ -78,7 +78,8 @@ def test_catalogo_publico_con_los_10_retos_y_sin_flags(client):
     data = response.json()
     assert data["ok"] is True
     ids = [c["id"] for c in data["challenges"]]
-    assert len(ids) == 10 and "crypto-xor-01" in ids and "wpa-handshake-expert" in ids
+    assert len(ids) == 14 and "crypto-xor-01" in ids and "wpa-handshake-expert" in ids
+    assert {"crypto-cesar-01", "misc-enc-01", "network-http-01", "stego-png-01"} <= set(ids)  # técnicas del 22 oct
     for challenge in data["challenges"]:
         assert "flag" not in challenge and "solution" not in challenge
     # Ordenado de menos a más puntos, como el catálogo del prototipo.
@@ -111,7 +112,7 @@ def test_resolver_xor_de_punta_a_punta(client):
     wrong = client.post("/api/submissions", headers=ana, json={"playerId": "2", "challengeId": "crypto-xor-01", "flag": "WISPR{nope}"})
     assert wrong.json() == {"ok": False, "challengeId": "crypto-xor-01"}
     ok = client.post("/api/submissions", headers=ana, json={"playerId": "2", "challengeId": "crypto-xor-01", "flag": recovered}).json()
-    assert (ok["ok"], ok["challengeId"], ok["points"]) == (True, "crypto-xor-01", 120)
+    assert (ok["ok"], ok["challengeId"], ok["points"]) == (True, "crypto-xor-01", 114)  # 120 − 5 % por 1 intento fallido
 
     # 3) Motor adaptativo: 2.º intento -> sube a Medium, y como XOR tiene
     #    generador se crea un reto NUEVO para Ana (historia de plantilla en
@@ -131,7 +132,7 @@ def test_resolver_xor_de_punta_a_punta(client):
 
     # 5) Ranking: Ana primera, marcada como `current`; Beto con 0.
     ranking = client.get("/api/ranking", headers=ana).json()["ranking"]
-    assert [(r["handle"], r["score"], r["current"]) for r in ranking] == [("@ana", 120, True), ("@beto", 0, False)]
+    assert [(r["handle"], r["score"], r["current"]) for r in ranking] == [("@ana", 114, True), ("@beto", 0, False)]
 
 
 def test_cada_jugador_tiene_su_archivo_y_su_flag(client):
@@ -196,9 +197,14 @@ def _solve_xor_any(data: bytes) -> str:
 
 def test_opciones_para_pedir_un_reto(client):
     data = client.get("/api/challenges/options").json()
-    assert {t["id"] for t in data["techniques"]} == {"xor_singlebyte", "iv_reuse_wep"}
+    assert {t["id"] for t in data["techniques"]} == {
+        "xor_singlebyte", "iv_reuse_wep", "caesar_vigenere", "encoding_layers", "http_plaintext_pcap", "stego_png"}
     assert data["levels"] == ["Foundation", "Medium", "Hard"]
     assert "Hospital" in data["themes"]
+    assert "practicePoints" not in data  # sin sesión no hay puntos personales
+    mine = client.get("/api/challenges/options", headers=client.tokens["Ana"]).json()
+    assert mine["practicePoints"]["stego_png"] == {"Foundation": 120, "Medium": 200, "Hard": 340}
+    assert "practicePoints" not in client.get("/api/challenges/options", headers=client.tokens["Profe"]).json()
 
 
 def test_estudiante_pide_un_reto_de_practica(client):
@@ -207,7 +213,7 @@ def test_estudiante_pide_un_reto_de_practica(client):
     data = response.json()
     reto = data["challenge"]
     assert data["visibleTo"] == "me" and data["generationError"]          # sin IA en los tests: plantilla
-    assert reto["difficulty"] == "Hard" and reto["points"] == 0           # práctica: sin puntos
+    assert reto["difficulty"] == "Hard" and reto["points"] == 340         # 1.º de su tipo y nivel: puntos completos
     assert "Mi barrio" in reto["title"] and "mi barrio" in reto["description"]
     assert "flag" not in reto
 
@@ -215,10 +221,47 @@ def test_estudiante_pide_un_reto_de_practica(client):
     content = client.get(f"/api/challenges/{reto['id']}/files/{reto['files'][0]['name']}", headers=client.tokens["Ana"]).content
     result = client.post("/api/submissions", headers=client.tokens["Ana"],
                          json={"challengeId": reto["id"], "flag": _solve_xor_any(content)}).json()
-    assert result["ok"] is True and result["points"] == 0
+    assert result["ok"] is True and result["points"] == 340
     # Beto no lo ve.
     beto_ids = [c["id"] for c in client.get("/api/challenges", headers=client.tokens["Beto"]).json()["challenges"]]
     assert reto["id"] not in beto_ids
+
+
+def test_la_practica_repetida_vale_cada_vez_menos(client):
+    """Regla del 22 oct: 100 % → 50 % → 25 % → 0 por técnica + nivel. Cuentan
+    también los pedidos sin resolver (pedir varios de golpe no los cobra todos)."""
+    points = [_generate(client, "Ana", technique="caesar_vigenere", difficulty="Foundation").json()["challenge"]["points"]
+              for _ in range(4)]
+    assert points == [120, 60, 30, 0]
+    # Otro nivel u otra técnica empiezan de cero; Beto no se ve afectado.
+    assert _generate(client, "Ana", technique="caesar_vigenere", difficulty="Medium").json()["challenge"]["points"] == 200
+    mine = client.get("/api/challenges/options", headers=client.tokens["Ana"]).json()["practicePoints"]
+    assert mine["caesar_vigenere"] == {"Foundation": 0, "Medium": 100, "Hard": 340}
+    assert mine["stego_png"]["Foundation"] == 120
+    beto = client.get("/api/challenges/options", headers=client.tokens["Beto"]).json()["practicePoints"]
+    assert beto["caesar_vigenere"]["Foundation"] == 120
+
+
+def test_un_reto_de_practica_de_cada_tecnica_nueva_se_puede_resolver(client):
+    """Pedido por la API → archivo propio → resolverlo como el estudiante → puntos."""
+    import base64
+
+    from app.services.challenge_generator import shift_letters
+
+    ana = client.tokens["Ana"]
+    expected = [120, 126, 132]  # racha limpia (bonus.py): el 2.º limpio seguido +5 %, el 3.º +10 %
+    for technique in ("caesar_vigenere", "encoding_layers", "stego_png"):
+        reto = _generate(client, "Ana", technique=technique, difficulty="Foundation").json()["challenge"]
+        content = client.get(f"/api/challenges/{reto['id']}/files/{reto['files'][0]['name']}", headers=ana).content
+        if technique == "caesar_vigenere":
+            flag = shift_letters(content.decode().strip(), [-13])
+        elif technique == "encoding_layers":
+            flag = base64.b64decode(content.strip()).decode()
+        else:
+            start = content.index(b"Comment\x00") + len(b"Comment\x00")
+            flag = content[start:content.index(b"}", start) + 1].decode()
+        result = client.post("/api/submissions", headers=ana, json={"challengeId": reto["id"], "flag": flag}).json()
+        assert result["ok"] is True and result["points"] == expected.pop(0), technique
 
 
 def test_profesor_publica_un_reto_para_todos(client):
@@ -234,7 +277,7 @@ def test_profesor_publica_un_reto_para_todos(client):
     assert client.post("/api/submissions", headers=client.tokens["Beto"],
                        json={"challengeId": reto["id"], "flag": flags["Ana"]}).json()["ok"] is False
     ok = client.post("/api/submissions", headers=client.tokens["Beto"], json={"challengeId": reto["id"], "flag": flags["Beto"]}).json()
-    assert ok["ok"] is True and ok["points"] == 200
+    assert ok["ok"] is True and ok["points"] == 190  # 200 − 5 %: antes probó la flag de Ana
 
 
 @pytest.mark.parametrize("body,error", [
@@ -266,7 +309,7 @@ def test_envio_desde_la_terminal_queda_marcado(client):
     flag = _catalog_flag("deauth-recon-foundation")
     client.post("/api/submissions", headers=ana, json={"challengeId": "deauth-recon-foundation", "flag": "WISPR{nope}", "source": "otra-cosa"})
     ok = client.post("/api/submissions", headers=ana, json={"challengeId": "deauth-recon-foundation", "flag": flag, "source": "terminal"})
-    assert ok.json()["ok"] is True and ok.json()["points"] == 120
+    assert ok.json()["ok"] is True and ok.json()["points"] == 114  # 120 − 5 % por el intento fallido
     submissions = client.get("/api/players/me", headers=ana).json()["player"]["submissions"]
     assert [(s["ok"], s["source"]) for s in submissions] == [(True, "terminal"), (False, "web")]
 

@@ -141,7 +141,7 @@ def next_challenge(db: DbSession, user: User, solved: Challenge) -> tuple[Challe
         .outerjoin(Solve, (Solve.challenge_id == Challenge.id) & (Solve.user_id == user.id))
         .where(Challenge.owner_id == user.id, Challenge.kind == technique, Challenge.difficulty == gen_level,
                Challenge.is_active.is_(True), Solve.challenge_id.is_(None),
-               Challenge.points > 0)  # los de práctica (pedidos por el jugador) no cuentan como siguiente
+               Challenge.purpose == "adaptive")  # los de práctica (pedidos por el jugador) no cuentan como siguiente
         .limit(1)
     ).first()
     if pending is not None:

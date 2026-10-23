@@ -114,6 +114,38 @@ _FALLBACK = {
         ),
         "hint": "Cuando dos tramas WEP comparten IV, también comparten keystream.",
     },
+    "caesar_vigenere": {
+        "title": "Mensaje antiguo en {short}",
+        "description": (
+            "En {long} apareció una nota con letras que no forman palabras. Parece cifrada con un método "
+            "clásico, de los que se usaban hace siglos. Analiza el archivo y recupera el mensaje original."
+        ),
+        "hint": "Los cifrados clásicos solo mueven letras: los números y símbolos te dicen dónde está cada parte.",
+    },
+    "encoding_layers": {
+        "title": "Texto envuelto en {short}",
+        "description": (
+            "En {long} se encontró un archivo de texto con una cadena extraña. No parece cifrada, sino "
+            "codificada una o varias veces. Identifica cada capa y recupera el mensaje que esconde."
+        ),
+        "hint": "Codificar no es cifrar: fíjate en qué caracteres usa la cadena para saber cómo se codificó.",
+    },
+    "http_plaintext_pcap": {
+        "title": "Tráfico sin candado en {short}",
+        "description": (
+            "El equipo de redes de {long} capturó tráfico de la intranet. Sospechan que un formulario envía "
+            "información sin cifrar. Analiza la captura y recupera el mensaje que viajó a la vista."
+        ),
+        "hint": "Si una página no usa HTTPS, todo lo que envía se puede leer en la captura.",
+    },
+    "stego_png": {
+        "title": "La foto de {short}",
+        "description": (
+            "Desde {long} alguien compartió una imagen que parece normal, pero pesa más de lo esperado. "
+            "Sospechan que oculta un mensaje. Analiza la imagen y recupéralo."
+        ),
+        "hint": "Una imagen guarda más que píxeles: revisa sus metadatos y lo que hay alrededor del contenido visible.",
+    },
 }
 
 _SYSTEM_PROMPT = (

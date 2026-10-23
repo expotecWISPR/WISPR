@@ -29,6 +29,18 @@ from pydantic import BaseModel, Field, field_validator
 # la flag en Supabase.
 FLAG_PATTERN = re.compile(r"^WISPR\{[^{}\r\n]{3,180}\}$")
 
+# Registro fijo de técnicas con generador en challenge_generator.py. Agregar
+# una técnica = sumarla acá, escribir su generador (con sus 3 niveles y sus
+# tests) y sus textos en technique_info.py. Ampliado el 22 oct con 4 técnicas.
+TechniqueId = Literal[
+    "iv_reuse_wep",
+    "xor_singlebyte",
+    "caesar_vigenere",
+    "encoding_layers",
+    "http_plaintext_pcap",
+    "stego_png",
+]
+
 
 class ChallengeSpec(BaseModel):
     """
@@ -70,7 +82,7 @@ class ChallengeSpec(BaseModel):
     # Registro fijo de técnicas que el equipo ya programó y probó en
     # challenge_generator.py. Si la IA devuelve cualquier otro valor,
     # Pydantic rechaza el objeto antes de intentar generar nada.
-    technique: Literal["iv_reuse_wep", "xor_singlebyte"]
+    technique: TechniqueId
 
     flag: str = Field(..., description="Flag exacta que debe coincidir al validar la respuesta del estudiante.")
 
@@ -106,7 +118,7 @@ class DatasetChallenge(BaseModel):
     category: Literal["web", "crypto", "forensics", "network", "osint", "stego", "reverse", "misc"]
     title: str = Field(..., min_length=3, max_length=90)
     description: str = Field(..., min_length=1)
-    technique: Literal["", "iv_reuse_wep", "xor_singlebyte"]
+    technique: Literal[""] | TechniqueId
     technique_notes: str = ""
     flag: str
     hint: str = Field(..., min_length=1)

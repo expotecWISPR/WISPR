@@ -85,7 +85,8 @@ def test_flag_correcta_suma_puntos_una_sola_vez(db):
     assert first["nextChallenge"]["id"] == "pmkid"
 
     second = scoring.submit_flag(db, _user(db), "deauth", OK_FLAG, source="terminal")
-    assert second == {"ok": True, "duplicate": True, "challengeId": "deauth", "points": 120}
+    assert {k: second[k] for k in ("ok", "duplicate", "challengeId", "points")} == {"ok": True, "duplicate": True, "challengeId": "deauth", "points": 120}
+    assert second["breakdown"]["total"] == 120  # el desglose guardado del primer acierto
 
     assert _count(db, Solve) == 1
     assert _count(db, Submission) == 2
@@ -125,7 +126,8 @@ def test_player_progress_tiene_la_forma_del_prototipo(db):
 
     assert progress["attempts"] == {"deauth": 2}
     assert list(progress["solved"]) == ["deauth"]
-    assert progress["solved"]["deauth"]["points"] == 120
+    assert progress["solved"]["deauth"]["points"] == 114  # 120 − 5 % por el intento fallido
+    assert progress["solved"]["deauth"]["breakdown"]["wrong"] == {"count": 1, "pct": -5, "points": -6}
     assert isinstance(progress["solved"]["deauth"]["time"], int)
     # Del más nuevo al más viejo, como en el prototipo.
     assert [s["ok"] for s in progress["submissions"]] == [True, False]

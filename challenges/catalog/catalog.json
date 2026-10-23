@@ -277,6 +277,58 @@
           "desc": "Archivo cifrado interceptado"
         }
       ]
+    },
+    {
+      "id": "crypto-cesar-01",
+      "title": "La Nota del César",
+      "template": "templates/crypto/cesar.json",
+      "category": "Criptografía clásica",
+      "files": [
+        {
+          "name": "crypto-cesar-01.txt",
+          "type": "txt",
+          "desc": "Nota cifrada"
+        }
+      ]
+    },
+    {
+      "id": "misc-enc-01",
+      "title": "Capas de Texto",
+      "template": "templates/misc/encoding.json",
+      "category": "Codificación",
+      "files": [
+        {
+          "name": "misc-enc-01.txt",
+          "type": "txt",
+          "desc": "Cadena codificada"
+        }
+      ]
+    },
+    {
+      "id": "network-http-01",
+      "title": "Formulario sin Candado",
+      "template": "templates/network/http.json",
+      "category": "Análisis de tráfico",
+      "files": [
+        {
+          "name": "network-http-01.pcap",
+          "type": "pcap",
+          "desc": "Captura de tráfico de la intranet"
+        }
+      ]
+    },
+    {
+      "id": "stego-png-01",
+      "title": "La Foto del Laboratorio",
+      "template": "templates/stego/png.json",
+      "category": "Esteganografía",
+      "files": [
+        {
+          "name": "stego-png-01.png",
+          "type": "png",
+          "desc": "Fotografía del laboratorio"
+        }
+      ]
     }
   ]
 }

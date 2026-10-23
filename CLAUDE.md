@@ -82,8 +82,9 @@ La variedad real ahora sale del código (archivo y flag por jugador, niveles que
 archivo) y la IA aporta variedad de historias. La IA **no inventa mecanismos nuevos** ni decide
 nada que haga a un reto más fácil o más difícil.
 
-Para el MVP, el pipeline se implementa completo solo en 1-2 categorías (crypto y network son
-las que ya tienen ejemplos curados); el resto usa retos estáticos hechos a mano.
+Técnicas con generador (22 oct, 6): `xor_singlebyte`, `iv_reuse_wep`, `caesar_vigenere`,
+`encoding_layers`, `http_plaintext_pcap` y `stego_png` — cada una con 3 niveles reales. Los retos
+Wi-Fi (deauth, handshake, PMKID) siguen siendo estáticos hechos a mano.
 
 Detalle completo del pipeline en `docs/pipeline_ia_retos.md`.
 
@@ -645,6 +646,56 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `POST /api/progress` como el resto. Recorrido completo probado en Chromium (Playwright) con un
   estudiante temporal: todas las actividades, feedback, XP guardado en Supabase, sin XP duplicado y
   sin desborde a 390 px. Estudiante borrado al terminar.
+* **Catálogo de la IA ampliado + la práctica suma puntos (22 oct).**
+  - **4 técnicas nuevas** (registro fijo `TechniqueId` en `app/schemas/challenge.py`, generadores en
+    `challenge_generator.py`, textos en `technique_info.py`, plantillas de respaldo en `ai_advisor.py`):
+    | Técnica | easy | medium | hard |
+    |---|---|---|---|
+    | `caesar_vigenere` | ROT13 | César (desplazamiento ≠ 13) | Vigenère, llave de 3-5 letras |
+    | `encoding_layers` | base64 | 2 capas (base64/hex/base32) | 3-4 capas, las tres, sin repetir seguidas |
+    | `http_plaintext_pcap` | POST con la flag en JSON | entre ruido, formulario con %7B | base64 partido en 2 segmentos TCP + señuelos |
+    | `stego_png` | metadato tEXt | base64 tras el IEND (metadato señuelo) | LSB del canal rojo (trailer señuelo) |
+    Igual que XOR/WEP: archivo y flag por jugador, el método del nivel anterior falla en el siguiente.
+    Un reto Foundation de cada una en el catálogo (`crypto-cesar-01`, `misc-enc-01`,
+    `network-http-01`, `stego-png-01`; 14 retos en total). Kali: capa nueva en `kali/Dockerfile` con
+    `exiftool`, `binwalk` y `python3-pil` (imagen reconstruida en la PC Windows).
+  - **Los retos que pide el estudiante suman puntos con rendimiento decreciente** por técnica +
+    nivel: 100 % → 50 % → 25 % → 0 (`challenge_factory.PRACTICE_DECAY`). Cuentan también los pedidos
+    sin resolver (pedir varios de golpe no los cobra todos al 100 %). Nueva columna
+    `challenges.purpose` (`practice`/`adaptive`/`class`; NULL = catálogo), migración `d7a4f19c3e58`
+    **aplicada** con relleno de los retos existentes: antes "práctica" = "0 puntos", ya no sirve.
+    `GET /api/challenges/options` con sesión de estudiante trae `practicePoints` y el formulario de la
+    web muestra cuánto valdrá el reto antes de pedirlo.
+  - 236 tests (41 nuevos). **Probado dentro de Kali real**: los 12 archivos (4 técnicas × 3 niveles)
+    resueltos con los comandos exactos de las pistas (`tr`, `base64`/`base32`/`xxd`, `tshark`,
+    `exiftool`, `strings`, PIL). Esa prueba encontró que en tshark 4.6 `http.file_data` sale en hex:
+    las pistas de HTTP usan `json.value.string` y `urlencoded-form.value`.
+* **Cronómetro por reto + bonos y penalizaciones (22 oct).** Toda la regla en
+  `app/services/bonus.py` (la usan web, terminal y pistas). Sobre los puntos del reto:
+  pista −15 % c/u (antes −10 %), intento fallido −5 % c/u (máx −25 %), resolver en < 10 min +15 %,
+  racha limpia +5 % por cada reto **limpio** (sin pistas ni fallos) que ya se lleva seguido (máx
+  +25 %; el 1.º limpio aún no tiene bono, el 2.º +5 %…). Un acierto no limpio corta la racha; los
+  retos de 0 pts no la suman ni la cortan. Total nunca < 0.
+  - El cronómetro lo guarda el **servidor**: `POST /api/challenges/{id}/start` la primera vez que
+    se abre el reto (tabla `challenge_timers`); sin esa hora no hay bono de velocidad.
+    `GET /api/challenges` trae `scoring` (reglas), `serverNow` y `startedAt` por reto; `/me` trae
+    `cleanStreak` y `timers`. `solves.clean` + `solves.breakdown` (desglose guardado). Migración
+    `e2b8c6d05a71` **aplicada**.
+  - Frontend: tarjeta «⏱ puntos en juego» en el detalle del reto (anillo que se vacía en los 10
+    min: verde → naranja en los últimos 2 → gris; marcador en vivo con signo + color; «Si lo
+    resuelves ahora: N pts») y resultado con desglose al resolver; versión compacta en la terminal.
+    Se actualiza cada segundo sin `render()` (no borra lo que se escribe en la flag). `ctf submit`
+    muestra el desglose en una línea. **Versión final (pedido del usuario, 22 oct):** en el detalle
+    del reto solo queda el anillo con el tiempo, sin tarjeta ni desglose, a la derecha del
+    encabezado (debajo en pantallas angostas); al resolver queda verde con el tiempo final.
+  - **Arreglo encontrado al probarlo:** las respuestas lentas del servidor (1-3 s con Supabase:
+    abrir pista, arrancar cronómetro, enviar flag) hacían `render()` y **borraban la flag que el
+    jugador estaba escribiendo** (lo de la pista ya pasaba antes). Ahora la flag se guarda como
+    borrador por reto (`flagDrafts`), `render()` devuelve foco y cursor, y arrancar el cronómetro ya
+    no redibuja la página.
+  - La «racha» del ranking sigue siendo la de envíos correctos seguidos (no la racha limpia).
+  - 243 tests. Probado en Chromium con todos los estados (activo, últimos minutos, vencido,
+    resuelto, celular, terminal) y `ctf submit` en Kali real.
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
@@ -656,15 +707,21 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 Todo lo del 20 oct quedó con **push en `main`** de los dos repos (`WISPR` y `WISPR-frontend`).
 EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
 
-1. **App de escritorio con Electron — FALTA y es parte del objetivo** ("aplicación de
-   escritorio"). `electron/main/index.js`, `electron/preload/index.js`,
-   `electron/main/ipcHandlers.js` y `electron/package.json` existen pero están **vacíos (0 bytes)**.
-   Propuesta acordada: una ventana mínima (~30-50 líneas) que abre la URL del servidor (EC2); toda
-   la lógica sigue en el servidor (encaja con la arquitectura centralizada). Sin `nodeIntegration`,
-   con `contextIsolation`. Confirmar con el equipo si lo hace el backend o el frontend.
+1. ~~App de escritorio con Electron~~ ✅ **Hecho (22 oct)** — `electron/` (Electron 44.7.0, ver
+   `electron/README.md`). Ventana segura que abre la URL del servidor (`WISPR_URL`, por defecto
+   `http://127.0.0.1:8787`): `contextIsolation` + `sandbox`, sin `nodeIntegration`, solo navega
+   dentro de WISPR (lo externo va al navegador del sistema), permisos negados, una sola instancia y
+   pantalla propia de «sin conexión» con «Reintentar». Se borró `ipcHandlers.js` (no hace falta
+   IPC). Probado con Playwright por CDP: sin servidor → pantalla offline; con servidor → carga
+   WISPR, la página no ve `require`/`process`, un enlace externo no se abre dentro. **Falta:**
+   probar la terminal Kali dentro de la app (debería funcionar igual: mismo origen que el
+   navegador) y, si se quiere, un instalador `.exe` (`electron-builder`). Ojo: en el entorno de
+   Claude Code dentro de VS Code está definida `ELECTRON_RUN_AS_NODE=1` → hay que quitarla para
+   lanzar Electron desde ahí.
 2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
    usar el Session Pooler de Supabase (ver "Conexión a Supabase por IPv4"); (b) `alembic upgrade
-   head` (hay 2 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`); (c) construir la imagen de Kali
+   head` (hay 4 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`) y
+   `python -m app.db.seed_challenges` (14 retos); (c) construir la imagen de Kali
    **desde cero** (ver 7d); (d) arrancar Node desde una consola real o como servicio (en Windows,
    Node sin consola se cae con `AttachConsole failed` al cerrar una terminal — no afecta a Linux).
 3. **Ensayo completo de la demo** en la máquina final: registro → retos → terminal (`ctf hint`,
@@ -781,8 +838,7 @@ del profesor llegan a `expociber202510@gmail.com`.
    `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
    `challenges/generated/` local.
 10. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
-11. **App de escritorio con Electron** (detectado el 20 oct: la carpeta `electron/` está vacía) —
-    ver "RETOMAR AQUÍ".
+11. ~~App de escritorio con Electron~~ ✅ Hecho (22 oct) — ver "RETOMAR AQUÍ" y `electron/README.md`.
 12. **Teoría, Módulos 4 y 6** — contenido a cargo del equipo (ver "RETOMAR AQUÍ").
 
 ---

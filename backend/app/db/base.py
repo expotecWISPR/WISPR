@@ -17,6 +17,7 @@ from app.db.session import Base  # noqa: F401
 from app.models.challenge import Challenge, ChallengeInstance  # noqa: F401
 from app.models.group import Group, GroupMember, GroupTask  # noqa: F401
 from app.models.hint import HintUnlock  # noqa: F401
+from app.models.timer import ChallengeTimer  # noqa: F401
 from app.models.lesson_progress import LessonProgress  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.submission import Solve, Submission  # noqa: F401

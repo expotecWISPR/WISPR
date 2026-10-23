@@ -5,9 +5,13 @@ Crea retos NUEVOS con historia de la IA. Tres usos (`purpose`):
     cola al resolver un reto (`nextChallenge`). Lo elige el motor adaptativo.
     Solo para ese jugador, con puntos normales.
   - "practice": un estudiante lo pide eligiendo técnica, dificultad y
-    escenario (POST /api/challenges/generate). Solo para él y SIN puntos: si
-    diera puntos, cualquiera podría pedir retos fáciles sin parar y subir en el
-    ranking resolviéndolos con un script.
+    escenario (POST /api/challenges/generate). Solo para él. Desde el 22 oct
+    da puntos con RENDIMIENTO DECRECIENTE por técnica + nivel (ver
+    PRACTICE_DECAY): el primero vale el 100 %, el segundo el 50 %, el tercero
+    el 25 % y desde el cuarto 0. Así no se puede subir en el ranking pidiendo
+    retos fáciles sin parar, y conviene probar técnicas y niveles nuevos.
+    Cuentan también los pedidos sin resolver: pedir 5 de golpe no los cobra
+    todos al 100 %.
   - "class": un profesor/admin lo pide con los mismos parámetros. Lo ven TODOS
     los estudiantes, con puntos normales, y cada uno recibe su propio archivo
     y su propia flag la primera vez que lo abre (instances.py). (Los grupos
@@ -55,6 +59,9 @@ def recent_titles(db: DbSession, user_id: int, limit: int = 15) -> list[str]:
 
 
 PURPOSES = ("adaptive", "practice", "class")
+# Fracción de los puntos del nivel que da el 1.º, 2.º y 3.º reto de práctica de
+# la misma técnica y nivel; desde el 4.º, 0 (sigue sirviendo para practicar).
+PRACTICE_DECAY = (1.0, 0.5, 0.25)
 # Niveles que se pueden pedir: las técnicas llegan hasta hard.
 REQUESTABLE_LEVELS = ("Foundation", "Medium", "Hard")
 # Un estudiante no puede acumular más de esto sin resolver (disco y base de datos).
@@ -63,22 +70,45 @@ PENDING_ERROR = (f"Ya tienes {MAX_PENDING_PRACTICE} retos de práctica sin resol
                  "Resuelve alguno antes de pedir otro.")
 
 
-def options() -> dict:
-    """Lo que se puede elegir al pedir un reto (el formulario del frontend lo lee de acá)."""
-    return {
+def options(db: DbSession | None = None, user: User | None = None) -> dict:
+    """
+    Lo que se puede elegir al pedir un reto (el formulario del frontend lo lee
+    de acá). Con la sesión de un estudiante incluye `practicePoints`: cuánto
+    valdría su próximo reto de cada técnica y nivel, para que vea la regla de
+    rendimiento decreciente antes de pedirlo.
+    """
+    result = {
         "techniques": [{"id": key, "name": info["name"], "category": info["label"]} for key, info in TECHNIQUES.items()],
         "levels": list(REQUESTABLE_LEVELS),
         "themes": [short for short, _ in ai_advisor.THEMES],
     }
+    if db is not None and user is not None and user.role not in ("profesor", "admin"):
+        result["practicePoints"] = {
+            technique: {level: practice_points(db, user.id, technique, level) for level in REQUESTABLE_LEVELS}
+            for technique in TECHNIQUES
+        }
+        result["fullPoints"] = {level: DIFFICULTY_POINTS[level] for level in REQUESTABLE_LEVELS}
+    return result
 
 
 def _pending_practice(db: DbSession, user_id: int) -> int:
     return db.scalar(
         select(func.count()).select_from(Challenge)
         .outerjoin(Solve, (Solve.challenge_id == Challenge.id) & (Solve.user_id == user_id))
-        .where(Challenge.owner_id == user_id, Challenge.points == 0, Challenge.is_active.is_(True),
+        .where(Challenge.owner_id == user_id, Challenge.purpose == "practice", Challenge.is_active.is_(True),
                Solve.challenge_id.is_(None))
     ) or 0
+
+
+def practice_points(db: DbSession, user_id: int, technique: str, label: str) -> int:
+    """Puntos del próximo reto de práctica de esa técnica y nivel (PRACTICE_DECAY)."""
+    previous = db.scalar(
+        select(func.count()).select_from(Challenge)
+        .where(Challenge.owner_id == user_id, Challenge.purpose == "practice",
+               Challenge.kind == technique, Challenge.difficulty == label)
+    ) or 0
+    factor = PRACTICE_DECAY[previous] if previous < len(PRACTICE_DECAY) else 0.0
+    return round(DIFFICULTY_POINTS[label] * factor)
 
 
 def request_challenge(db: DbSession, user: User, body: dict) -> dict:
@@ -126,6 +156,7 @@ def create_challenge(
     label = SPEC_DIFFICULTY[difficulty]
     info, texts = TECHNIQUES[technique], technique_level(technique, difficulty)
     owner_id = None if purpose == "class" else user.id
+    points = practice_points(db, user.id, technique, label) if purpose == "practice" else DIFFICULTY_POINTS[label]
     narrative, source, ai_error = ai_advisor.generate_narrative(
         technique, difficulty, avoid_titles=recent_titles(db, user.id), player_key=str(user.id), theme=theme
     )
@@ -147,7 +178,8 @@ def create_challenge(
         category=info["label"],
         kind=spec.technique,
         difficulty=label,
-        points=0 if purpose == "practice" else DIFFICULTY_POINTS[label],
+        points=points,
+        purpose=purpose,
         description=spec.description,
         objective=texts["objective"],
         flag="",  # la flag vive solo en la instancia del dueño
