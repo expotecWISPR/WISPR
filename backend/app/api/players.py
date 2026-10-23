@@ -19,6 +19,8 @@ con mensajes de error en español tal como los espera el frontend, y
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -201,6 +203,16 @@ async def change_password(
     )
     status = result.pop("status", 400)
     return result if result["ok"] else JSONResponse(status_code=status, content=result)
+
+
+@router.post("/tour")
+def tour_seen(current_player: User = Depends(get_current_player), db: Session = Depends(get_db)):
+    """Marca el recorrido de bienvenida como visto (terminado o saltado).
+    Solo la primera vez guarda la hora; repetirlo desde Progreso no la cambia."""
+    if current_player.tour_seen_at is None:
+        current_player.tour_seen_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"ok": True}
 
 
 @router.post("/logout")

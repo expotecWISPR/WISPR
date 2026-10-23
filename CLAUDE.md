@@ -244,7 +244,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 20 de octubre de 2026.
+**Última actualización:** 22 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -696,13 +696,29 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   - La «racha» del ranking sigue siendo la de envíos correctos seguidos (no la racha limpia).
   - 243 tests. Probado en Chromium con todos los estados (activo, últimos minutos, vencido,
     resuelto, celular, terminal) y `ctf submit` en Kali real.
+* **Recorrido de bienvenida con Wisp (22 oct).** La primera vez que un **estudiante** entra, Wisp
+  (la mascota, `img/mascot.png`) lo guía en 8 pasos: bienvenida → anillo de avance → Retos → Teoría
+  → Terminal → Ranking → reglas de puntos (lo que se quitó de la tarjeta del cronómetro) → su
+  progreso, con «Ir a mi primer reto» (el primer Foundation sin resolver). Oscurece la página y
+  deja iluminada la parte de la que habla; en el celular abre la hamburguesa para iluminar las
+  pestañas. Atrás/Siguiente/Saltar, flechas y Esc, foco atrapado en la burbuja, sin animación si
+  el usuario la tiene desactivada. Se repite desde Progreso («Ver el recorrido de Wisp»).
+  - Se guarda en el servidor para que no se repita en otro equipo ni en Electron: columna
+    `users.tour_seen_at` (migración `f4c1a8e93b26`, **aplicada**), `tourSeen` en `/me` y
+    `POST /api/players/tour`. Las cuentas que ya existían lo verán una vez. Profesor y admin no
+    lo ven. Sin FastAPI (prototipo Node solo) no aparece.
+  - 244 tests. Probado en Chromium (escritorio y 390 px): aparece una sola vez, no vuelve al
+    entrar de nuevo, Esc lo cierra, sin desborde ni errores.
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
   **Session Pooler** (`aws-0-ca-central-1.pooler.supabase.com:5432`, usuario `postgres.<ref>`).
   Para distinguirlo: `nslookup db.<ref>.supabase.co` responde solo una IP `2600:…` → es esto.
 
-## ▶ RETOMAR AQUÍ (cierre de la sesión del 20 oct)
+## ▶ RETOMAR AQUÍ (cierre de la sesión del 22 oct)
+
+**Resumen del 22 oct (flujo completo y cómo funciona cada cosa): `docs/SESION-22-OCT.md`.** Todo
+lo del 22 oct quedó con push en `main` de los dos repos.
 
 Todo lo del 20 oct quedó con **push en `main`** de los dos repos (`WISPR` y `WISPR-frontend`).
 EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
@@ -720,7 +736,8 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    lanzar Electron desde ahí.
 2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
    usar el Session Pooler de Supabase (ver "Conexión a Supabase por IPv4"); (b) `alembic upgrade
-   head` (hay 4 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`) y
+   head` (hay 5 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`,
+   `f4c1a8e93b26`) y
    `python -m app.db.seed_challenges` (14 retos); (c) construir la imagen de Kali
    **desde cero** (ver 7d); (d) arrancar Node desde una consola real o como servicio (en Windows,
    Node sin consola se cae con `AttachConsole failed` al cerrar una terminal — no afecta a Linux).

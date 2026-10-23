@@ -53,6 +53,11 @@ class User(Base):
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_login_window_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Cuándo terminó (o saltó) el recorrido de bienvenida con Wisp. NULL = la
+    # próxima vez que entre se le muestra. Va en la base y no en el navegador
+    # para que no se repita al entrar desde otro equipo o desde Electron.
+    tour_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

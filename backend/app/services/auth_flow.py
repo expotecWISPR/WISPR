@@ -152,6 +152,7 @@ def public_player(user: User, db: DbSession | None = None) -> dict:
         "submissions": [],
         "lessonProgress": {},
         "mustChangePassword": bool(user.must_change_password),
+        "tourSeen": user.tour_seen_at is not None,
     }
     if db is not None:
         # Import local: estos servicios no dependen de auth_flow, pero así se

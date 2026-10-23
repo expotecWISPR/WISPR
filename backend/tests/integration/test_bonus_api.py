@@ -168,3 +168,19 @@ def test_nunca_baja_de_cero(client):
     db.commit()
     assert bonus.breakdown(db, 1, challenge)["total"] == 0
     db.close()
+
+
+def test_recorrido_de_bienvenida_se_marca_una_sola_vez(client):
+    assert client.get("/api/players/me", headers=client.ana).json()["player"]["tourSeen"] is False
+    assert client.post("/api/players/tour").status_code == 401
+    assert client.post("/api/players/tour", headers=client.ana).json() == {"ok": True}
+    db = client.db()
+    first = db.get(User, 1).tour_seen_at
+    db.close()
+    assert first is not None
+    # Repetirlo desde Progreso no cambia la hora guardada.
+    client.post("/api/players/tour", headers=client.ana)
+    db = client.db()
+    assert db.get(User, 1).tour_seen_at == first
+    db.close()
+    assert client.get("/api/players/me", headers=client.ana).json()["player"]["tourSeen"] is True
