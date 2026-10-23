@@ -1,5 +1,5 @@
 """
-IA de WISPR (Together AI · Llama 3.3 70B): escribe la HISTORIA de cada reto.
+IA de WISPR (Together AI · Muse Glimmer 30B): escribe la HISTORIA de cada reto.
 
 Cambio del 13 oct (guía del ingeniero, fase 5). Antes se le pedía a la IA el
 reto entero (narrativa + flag + técnica + dificultad) y, con solo dos
@@ -41,9 +41,11 @@ from app.services.technique_info import TECHNIQUES, technique_level
 
 log = logging.getLogger(__name__)
 
-# Modelo base, vía inferencia estándar de Together AI (sin fine-tuning
-# todavía). Cuando el LoRA esté listo, se cambia SOLO este valor.
-MODEL_NAME = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+# Modelo base, vía inferencia estándar de Together AI, guiado solo con
+# instrucciones (sin fine-tuning: el LoRA quedó trabado). Se elige con
+# TOGETHER_MODEL en el .env. Hasta el 23 oct fue Llama 3.3 70B Instruct Turbo,
+# que Together retiró ese día.
+MODEL_NAME = settings.TOGETHER_MODEL
 
 # Si la IA tarda más que esto, el reto se crea con la plantilla: el jugador
 # está esperando la respuesta de su envío de flag.
@@ -242,7 +244,12 @@ def request_narrative(technique: str, difficulty: str, theme: str, avoid_titles:
             model=MODEL_NAME,
             messages=_build_messages(technique, difficulty, theme, avoid_titles),
             temperature=0.9,  # alta a propósito: queremos variedad de historias
-            max_tokens=400,
+            # Muse Glimmer "piensa" por dentro antes de responder y esos tokens
+            # cuentan en max_tokens. Probado el 23 oct: sin esto gastaba los 400
+            # pensando y devolvía el texto vacío (siempre caía a la plantilla);
+            # con "low" responde en ~4 s con unos 200 tokens.
+            max_tokens=800,
+            extra_body={"reasoning_effort": "low"},
         )
         narrative = ChallengeNarrative(**_extract_json(response.choices[0].message.content or ""))
     except (ValidationError, json.JSONDecodeError, TypeError) as exc:

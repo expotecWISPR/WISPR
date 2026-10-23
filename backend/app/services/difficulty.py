@@ -146,5 +146,11 @@ def next_challenge(db: DbSession, user: User, solved: Challenge) -> tuple[Challe
     ).first()
     if pending is not None:
         return pending, reason, ""
+    # Con la lista llena (MAX_PENDING) no se crea nada: se recomienda uno de los
+    # que ya tiene por resolver.
+    if challenge_factory.pending_count(db, user.id) >= challenge_factory.MAX_PENDING:
+        pick = _pick_from_catalog(db, user, solved, level)
+        if pick is not None:
+            return pick, reason, ""
     created, ai_error = challenge_factory.create_challenge(db, user, technique, gen_level)
     return created, reason, ai_error

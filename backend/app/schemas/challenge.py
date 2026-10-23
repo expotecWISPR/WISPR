@@ -47,7 +47,7 @@ class ChallengeSpec(BaseModel):
     Especificación de un reto, justo antes de materializarse.
 
     Desde el 13 oct (guía del ingeniero) la arma el backend: la técnica, la
-    dificultad y la flag las decide el código; la IA (Llama 3.3 70B vía
+    dificultad y la flag las decide el código; la IA (Muse Glimmer 30B vía
     Together AI) solo aporta la narrativa (`description` y `hint`, ver
     ai_advisor.py). Igual pasa por esta validación: nada llega al generador
     sin ella.

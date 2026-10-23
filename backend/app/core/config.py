@@ -44,6 +44,10 @@ class Settings(BaseSettings):
 
     # ── Together AI (recomendaciones, generación de retos) ────────────
     TOGETHER_API_KEY: str
+    # Modelo de la IA que escribe las historias. Va en la configuración para
+    # cambiarlo sin tocar código si Together vuelve a retirar uno (el 23 oct
+    # retiró meta-llama/Llama-3.3-70B-Instruct-Turbo).
+    TOGETHER_MODEL: str = "meta-models/Muse-Glimmer-30B"
 
     # ── AWS (S3 + CloudWatch) ──────────────────────────────────────────
     AWS_ACCESS_KEY_ID: str

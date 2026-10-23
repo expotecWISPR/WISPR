@@ -227,9 +227,12 @@ def test_estudiante_pide_un_reto_de_practica(client):
     assert reto["id"] not in beto_ids
 
 
-def test_la_practica_repetida_vale_cada_vez_menos(client):
+def test_la_practica_repetida_vale_cada_vez_menos(client, monkeypatch):
     """Regla del 22 oct: 100 % → 50 % → 25 % → 0 por técnica + nivel. Cuentan
     también los pedidos sin resolver (pedir varios de golpe no los cobra todos)."""
+    from app.services import challenge_factory
+
+    monkeypatch.setattr(challenge_factory, "MAX_PENDING", 50)  # el tope se prueba aparte
     points = [_generate(client, "Ana", technique="caesar_vigenere", difficulty="Foundation").json()["challenge"]["points"]
               for _ in range(4)]
     assert points == [120, 60, 30, 0]
@@ -242,11 +245,14 @@ def test_la_practica_repetida_vale_cada_vez_menos(client):
     assert beto["caesar_vigenere"]["Foundation"] == 120
 
 
-def test_un_reto_de_practica_de_cada_tecnica_nueva_se_puede_resolver(client):
+def test_un_reto_de_practica_de_cada_tecnica_nueva_se_puede_resolver(client, monkeypatch):
     """Pedido por la API → archivo propio → resolverlo como el estudiante → puntos."""
     import base64
 
+    from app.services import challenge_factory
     from app.services.challenge_generator import shift_letters
+
+    monkeypatch.setattr(challenge_factory, "MAX_PENDING", 50)  # el tope se prueba aparte
 
     ana = client.tokens["Ana"]
     expected = [120, 126, 132]  # racha limpia (bonus.py): el 2.º limpio seguido +5 %, el 3.º +10 %
@@ -294,13 +300,39 @@ def test_pedir_un_reto_exige_sesion(client):
     assert client.post("/api/challenges/generate", json={"technique": "xor_singlebyte", "difficulty": "Medium"}).status_code == 401
 
 
-def test_limite_de_practicas_sin_resolver(client):
+def test_tope_de_15_retos_por_resolver(client):
+    """Regla del 23 oct: máximo 15 retos por resolver contando el catálogo; cada
+    reto resuelto libera un espacio para pedir otro."""
     from app.services import challenge_factory
 
-    for _ in range(challenge_factory.MAX_PENDING_PRACTICE):
+    ana = client.tokens["Ana"]
+    total = len(client.get("/api/challenges", headers=ana).json()["challenges"])
+    options = client.get("/api/challenges/options", headers=ana).json()
+    assert (options["pending"], options["maxPending"]) == (total, challenge_factory.MAX_PENDING)
+    for _ in range(challenge_factory.MAX_PENDING - total):
         assert _generate(client, "Ana", technique="iv_reuse_wep", difficulty="Foundation").status_code == 200
     blocked = _generate(client, "Ana", technique="iv_reuse_wep", difficulty="Foundation")
     assert blocked.status_code == 400 and blocked.json()["error"] == challenge_factory.PENDING_ERROR
+    # Resolver un reto Wi-Fi (el motor solo recomienda, no crea) libera un espacio.
+    flag = _catalog_flag("deauth-recon-foundation")
+    assert client.post("/api/submissions", headers=ana, json={"challengeId": "deauth-recon-foundation", "flag": flag}).json()["ok"]
+    assert client.get("/api/challenges/options", headers=ana).json()["pending"] == challenge_factory.MAX_PENDING - 1
+    assert _generate(client, "Ana", technique="iv_reuse_wep", difficulty="Foundation").status_code == 200
+
+
+def test_con_la_lista_llena_el_motor_solo_recomienda(client, monkeypatch):
+    """Si al resolver ya tiene el máximo por resolver, el motor adaptativo no crea
+    un reto nuevo: recomienda uno de los que ya tiene."""
+    from app.services import challenge_factory
+
+    ana = client.tokens["Ana"]
+    before = {c["id"] for c in client.get("/api/challenges", headers=ana).json()["challenges"]}
+    monkeypatch.setattr(challenge_factory, "MAX_PENDING", len(before) - 1)
+    flag = _solve_xor_easy(client.get("/api/challenges/crypto-xor-01/files/crypto-xor-01.bin", headers=ana).content)
+    nxt = client.post("/api/submissions", headers=ana, json={"challengeId": "crypto-xor-01", "flag": flag}).json()["nextChallenge"]
+    after = {c["id"] for c in client.get("/api/challenges", headers=ana).json()["challenges"]}
+    assert after == before  # no se creó nada
+    assert nxt["id"] in before and nxt["id"] != "crypto-xor-01"
 
 
 def test_envio_desde_la_terminal_queda_marcado(client):

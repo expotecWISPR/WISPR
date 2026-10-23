@@ -69,7 +69,7 @@ ingeniero, `docs/Guía WISPR retos variados y dificultad adaptativa.pdf`) el rep
 1. **Lo decide el backend (código):** la técnica (registro fijo), la dificultad (motor
    adaptativo, `app/services/difficulty.py`), los parámetros de cada nivel
    (`challenge_generator.py`) y la flag (aleatoria, con `secrets`, distinta por jugador).
-2. **Lo escribe la IA (Together AI + Llama 3.3 70B):** solo la historia — título, descripción y
+2. **Lo escribe la IA (Together AI + Muse Glimmer 30B; hasta el 23 oct, Llama 3.3 70B):** solo la historia — título, descripción y
    una pista —, con un escenario elegido al azar y sin repetir los títulos que el jugador ya vio
    (`app/services/ai_advisor.py`). Si falla, se usa una plantilla.
 3. **Materialización (determinista):** todo se valida con `ChallengeSpec`
@@ -108,10 +108,12 @@ La IA no reemplaza el motor de generación procedural: aporta el texto, el motor
 decide y materializa. Ningún archivo, contenedor o flag se genera sin pasar primero por la
 validación de Pydantic. Detalle completo del flujo en `docs/pipeline_ia_retos.md`.
 
-**Modelo y método:** Llama 3.3 70B Instruct Turbo vía Together AI, ajustado con **LoRA**
-(no fine-tuning completo — se evaluó y se descartó por costo e infraestructura de GPU). El
-dataset de entrenamiento tiene ~500 ejemplos curados por el equipo, repartidos en varias
-categorías.
+**Modelo y método (actualizado 23 oct):** `meta-models/Muse-Glimmer-30B` vía Together AI
+(configurable con `TOGETHER_MODEL` en el `.env`), **modelo base guiado con instrucciones**
+(*prompting*), sin fine-tuning. Hasta el 23 oct fue Llama 3.3 70B Instruct Turbo, que Together
+retiró ese día. **LoRA se intentó y quedó trabado** (el equipo lo describe como "un bucle sin
+arreglar"); no se usa. El dataset de ~500 ejemplos curados por el equipo sigue listo por si se
+retoma después de EXPOTEC. Fine-tuning completo: se evaluó y se descartó por costo y GPU.
 
 ---
 
@@ -199,9 +201,10 @@ complejidad innecesaria a esta escala (ver `docs/arquitectura_mvp.md`).
 ## Inteligencia artificial (generación de retos y recomendación)
 
 * Together AI — proveedor de inferencia y de fine-tuning administrado.
-* Llama 3.3 70B Instruct Turbo — modelo base, ajustado con **LoRA** vía el servicio de
-  fine-tuning administrado de Together AI (no se gestiona infraestructura GPU propia). Dataset
-  curado por el equipo (~500 ejemplos, varias categorías).
+* Muse Glimmer 30B (`meta-models/Muse-Glimmer-30B`, desde el 23 oct; antes Llama 3.3 70B
+  Instruct Turbo, retirado por Together) — modelo base guiado con instrucciones, sin
+  fine-tuning. Se elige con `TOGETHER_MODEL`. Dataset curado por el equipo (~500 ejemplos)
+  listo para un LoRA futuro; el intento de LoRA quedó trabado y no se usa.
 * El **fine-tuning completo** (reentrenar todos los parámetros del modelo) se evaluó y se
   descartó: requiere GPUs dedicadas y días de entrenamiento, inviable con los recursos del
   equipo. LoRA es viable porque solo entrena una fracción pequeña de los parámetros y corre
@@ -229,7 +232,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 * Redis — sin necesidad demostrada a la escala del MVP.
 * Celery — sin tareas en segundo plano que lo justifiquen todavía.
 * MinIO — reemplazado por Amazon S3 (el proyecto ya usa AWS para almacenamiento de objetos).
-* LLM genérico — resuelto: se usa específicamente Together AI + Llama 3.3 70B.
+* LLM genérico — resuelto: se usa específicamente Together AI (Muse Glimmer 30B desde el 23 oct).
 * Fine-tuning completo (reentrenar todos los parámetros) — inviable por GPU/tiempo. Se usa
   **LoRA** en su lugar (fine-tuning parcial, vía servicio administrado de Together AI).
 * Integración nativa "GitHub Repository" de Supabase (migraciones vía su CLI + branching) — el
@@ -709,6 +712,36 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
     lo ven. Sin FastAPI (prototipo Node solo) no aparece.
   - 244 tests. Probado en Chromium (escritorio y 390 px): aparece una sola vez, no vuelve al
     entrar de nuevo, Esc lo cierra, sin desborde ni errores.
+* **Migración del modelo de la IA (23 oct).** Together retiró
+  `meta-llama/Llama-3.3-70B-Instruct-Turbo` el 23 oct (aviso por correo a
+  expociber202510@gmail.com). Ahora: `meta-models/Muse-Glimmer-30B`, la alternativa que
+  recomendó Together, más barata ($0.35 entrada / $1.50 salida por millón de tokens).
+  - El modelo se elige con `TOGETHER_MODEL` en el `.env` (`app/core/config.py`); por defecto el
+    nuevo. Si Together vuelve a retirar uno, se cambia sin tocar código.
+  - **Muse Glimmer "piensa" por dentro** y esos tokens cuentan en `max_tokens`: con los 400 de
+    antes devolvía el texto vacío y todo caía a la plantilla. Arreglo en `request_narrative`:
+    `extra_body={"reasoning_effort": "low"}` y `max_tokens=800`. Si se cambia a un modelo que no
+    razona y Together rechaza ese parámetro, quitarlo.
+  - Probado con la API real: 12/12 historias válidas (6 técnicas × 2 niveles), 3.5 s de
+    promedio, 4.4 s de máximo (límite 12 s). Un reto pedido por la API salió con
+    `generator: "ai"`. 244 tests.
+  - **Hallazgo:** la `TOGETHER_API_KEY` del `.env` de la PC Windows era un texto de relleno de
+    9 caracteres: desde el 20 oct **todas** las historias en esa PC salieron de plantilla sin
+    que nadie lo notara (el respaldo no avisa). Se puso una key nueva de la cuenta del proyecto.
+    Para comprobarlo en otra máquina: pedir un reto y ver que `generator` sea `"ai"`.
+  - En la cuenta de Together existen dos modelos propios
+    `expociber20251_08dc/Llama-3.3-70B-Instruct-Reference-…` (probablemente los intentos de
+    LoRA). No se usan.
+* **Máximo 15 retos por resolver (23 oct).** Pedido del usuario para que la pestaña Retos no se
+  sature. Cuenta **todo** lo que el estudiante ve sin resolver, catálogo incluido (14 retos): al
+  empezar puede pedir 1, y cada reto que resuelve libera un espacio. `MAX_PENDING = 15` y
+  `pending_count()` en `challenge_factory.py` (reemplaza el máximo de 5 de práctica). Si al
+  resolver ya tiene 15, el motor adaptativo **no crea** un reto: recomienda uno de los que ya
+  tiene (`difficulty.next_challenge`). Los retos que publica un profesor no se frenan (tarea de
+  clase). `GET /api/challenges/options` trae `pending` y `maxPending`.
+  - Web: la pestaña Retos se divide en «Por resolver · N de 15» y «Resueltos» (cerrada por
+    defecto, botón «Ver resueltos»); el formulario dice cuántos espacios quedan y se deshabilita
+    con la lista llena. 245 tests; probado en Chromium (escritorio y 390 px).
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
@@ -747,7 +780,7 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    algo que no existe):
    | Dice el proyecto | Realidad (20 oct) |
    |---|---|
-   | Llama 3.3 ajustado con LoRA | Modelo base + prompting (LoRA en pausa desde el 7 oct) |
+   | Llama 3.3 ajustado con LoRA | ✅ Corregido (23 oct): Muse Glimmer 30B base + prompting; LoRA trabado, no se usa |
    | Pandas / scikit-learn | Dificultad adaptativa por reglas (`difficulty.py`); sin Pandas |
    | seccomp / AppArmor | Perfiles **por defecto** de Docker + `--cap-drop ALL`, `no-new-privileges`, `--read-only`, límites de memoria/CPU/procesos, red interna |
    | Docker Compose | `docker-compose.yml` vacío; los contenedores los crea Node |

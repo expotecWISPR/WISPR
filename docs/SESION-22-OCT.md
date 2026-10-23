@@ -88,7 +88,7 @@ niveles **reales**: el método que sirve en un nivel falla en el siguiente.
 
 **Cómo funciona (igual que XOR/WEP):**
 1. El **código** decide la técnica, el nivel y la flag (aleatoria, distinta por jugador).
-2. La **IA** (Together AI) solo escribe la historia: título, descripción y una pista. Si falla,
+2. La **IA** (Together AI; desde el 23 oct, Muse Glimmer 30B en vez de Llama 3.3) solo escribe la historia: título, descripción y una pista. Si falla,
    se usa una plantilla.
 3. El **generador** (`challenge_generator.py`) construye el archivo de ese jugador.
 

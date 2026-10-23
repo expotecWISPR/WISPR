@@ -40,7 +40,7 @@ from app.models.challenge import Challenge
 from app.models.submission import Solve, Submission
 from app.models.user import User
 from app.schemas.challenge import ChallengeSpec
-from app.services import ai_advisor, instances
+from app.services import ai_advisor, challenges, instances
 from app.services.challenge_generator import generate_flag
 from app.services.challenges import DIFFICULTY_POINTS, SPEC_DIFFICULTY
 from app.services.technique_info import LEVEL_TO_SPEC, TECHNIQUES, technique_level
@@ -64,10 +64,13 @@ PURPOSES = ("adaptive", "practice", "class")
 PRACTICE_DECAY = (1.0, 0.5, 0.25)
 # Niveles que se pueden pedir: las técnicas llegan hasta hard.
 REQUESTABLE_LEVELS = ("Foundation", "Medium", "Hard")
-# Un estudiante no puede acumular más de esto sin resolver (disco y base de datos).
-MAX_PENDING_PRACTICE = 5
-PENDING_ERROR = (f"Ya tienes {MAX_PENDING_PRACTICE} retos de práctica sin resolver. "
-                 "Resuelve alguno antes de pedir otro.")
+# Retos por resolver que puede tener un estudiante a la vez, contando el
+# catálogo (23 oct): cada reto que resuelve libera un espacio. Así su lista de
+# retos no se satura (y tampoco el disco ni la base de datos). Los que publica
+# un profesor no se frenan: son tarea de clase.
+MAX_PENDING = 15
+PENDING_ERROR = (f"Ya tienes {MAX_PENDING} retos por resolver. "
+                 "Resuelve uno para liberar un espacio y pedir otro.")
 
 
 def options(db: DbSession | None = None, user: User | None = None) -> dict:
@@ -88,16 +91,15 @@ def options(db: DbSession | None = None, user: User | None = None) -> dict:
             for technique in TECHNIQUES
         }
         result["fullPoints"] = {level: DIFFICULTY_POINTS[level] for level in REQUESTABLE_LEVELS}
+        result["pending"] = pending_count(db, user.id)
+        result["maxPending"] = MAX_PENDING
     return result
 
 
-def _pending_practice(db: DbSession, user_id: int) -> int:
-    return db.scalar(
-        select(func.count()).select_from(Challenge)
-        .outerjoin(Solve, (Solve.challenge_id == Challenge.id) & (Solve.user_id == user_id))
-        .where(Challenge.owner_id == user_id, Challenge.purpose == "practice", Challenge.is_active.is_(True),
-               Solve.challenge_id.is_(None))
-    ) or 0
+def pending_count(db: DbSession, user_id: int) -> int:
+    """Retos que el jugador ve y todavía no resolvió (catálogo + los suyos)."""
+    solved = set(db.scalars(select(Solve.challenge_id).where(Solve.user_id == user_id)))
+    return sum(1 for challenge in challenges.list_active(db, user_id) if challenge.id not in solved)
 
 
 def practice_points(db: DbSession, user_id: int, technique: str, label: str) -> int:
@@ -130,7 +132,7 @@ def request_challenge(db: DbSession, user: User, body: dict) -> dict:
         return {"ok": False, "error": str(exc)}
 
     purpose = "class" if user.role in ("profesor", "admin") else "practice"
-    if purpose == "practice" and _pending_practice(db, user.id) >= MAX_PENDING_PRACTICE:
+    if purpose == "practice" and pending_count(db, user.id) >= MAX_PENDING:
         return {"ok": False, "error": PENDING_ERROR}
     challenge, ai_error = create_challenge(db, user, technique, level, purpose=purpose, theme=theme)
     return {"ok": True, "challenge": challenge, "purpose": purpose, "aiError": ai_error}

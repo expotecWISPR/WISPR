@@ -20,7 +20,7 @@ repitiendo los ejemplos. El flujo actual es:
    decide TÉCNICA y NIVEL
               │
               ▼
-   Together AI · Llama 3.3 70B (ai_advisor.py)
+   Together AI · Muse Glimmer 30B (ai_advisor.py; hasta el 23 oct, Llama 3.3 70B)
    recibe técnica + nivel + resumen técnico + escenario al azar + títulos ya vistos
    devuelve SOLO {title, description, hint}
               │  (texto no confiable)
@@ -97,7 +97,7 @@ lenguaje haga bien de forma confiable, sin importar cuántos ejemplos de entrena
                         │
                         ▼
    ┌─────────────────────────────────────────────┐
-   │  Together AI · Llama 3.3 70B + LoRA           │
+   │  Together AI · Muse Glimmer 30B               │
    │  Genera un JSON con la especificación del reto│
    └───────────────────────┬───────────────────────┘
                             │  (texto, no confiable todavía)
@@ -198,6 +198,11 @@ llamadas diferentes).
 ---
 
 ## Fine-tuning: LoRA, no fine-tuning completo
+
+> **Estado real (23 oct):** no se usa ningún modelo ajustado. El intento de LoRA quedó trabado
+> y la IA corre con `meta-models/Muse-Glimmer-30B` (modelo base + instrucciones, configurable
+> con `TOGETHER_MODEL`). Llama 3.3 70B Instruct Turbo lo retiró Together el 23 oct. Lo que sigue
+> es el plan original, conservado como referencia por si se retoma después de EXPOTEC.
 
 * **Modelo base:** Llama 3.3 70B Instruct Turbo.
 * **Método:** LoRA (Low-Rank Adaptation) — congela el modelo base y entrena solo una fracción

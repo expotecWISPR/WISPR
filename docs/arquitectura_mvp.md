@@ -21,7 +21,7 @@ flowchart TB
 
     EC2 --> S3[(Amazon S3\narchivos de retos)]
     EC2 --> SUPA[(Supabase\nPostgreSQL)]
-    EC2 --> TAI[Together AI\nLlama 3.3 70B]
+    EC2 --> TAI[Together AI\nMuse Glimmer 30B]
     EC2 --> CW[CloudWatch\nlogs]
 ```
 
@@ -68,7 +68,7 @@ el Security Group es el único firewall, permitiendo solo los puertos necesarios
 
         Amazon S3            ◄──  HTTPS 443        ──  archivos de retos
         Supabase PostgreSQL  ◄──  TCP 5432 / 6543   ──  usuarios, flags, puntajes
-        Together AI          ◄──  HTTPS 443        ──  recomendaciones (Llama 3.3 70B)
+        Together AI          ◄──  HTTPS 443        ──  historias de retos (Muse Glimmer 30B)
         AWS CloudWatch       ◄──  HTTPS 443        ──  logs del sistema
 ```
 
@@ -163,7 +163,7 @@ cómputo): **~$17 USD en total**, muy por debajo del presupuesto de $300-400.
 | EC2 t3.medium | nginx + FastAPI + Docker host de retos | ~$0.0416/hora solo mientras corre |
 | Amazon S3 | Archivos de retos (.pcap, binarios, imágenes) | Casi $0 al volumen del proyecto |
 | Supabase | Base de datos PostgreSQL | $0 (tier gratuito) |
-| Together AI | Llama 3.3 70B vía API, sin fine-tuning | Pago por token, estimado < $5/mes |
+| Together AI | Muse Glimmer 30B vía API, sin fine-tuning (Llama 3.3 70B hasta el 23 oct) | Pago por token, estimado < $5/mes |
 | CloudWatch | Logs básicos del backend | $0 (dentro del tier gratuito) |
 | EBS (disco del EC2) | Persistencia mientras la instancia está detenida | ~$2.40/mes |
 
