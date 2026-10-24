@@ -6,6 +6,10 @@ las lecciones se resuelven en el navegador, el servidor solo valida rangos y
 conserva el MEJOR intento (percent/xp nunca bajan). Se devuelve con la forma
 de `player.lessonProgress` (camelCase, tiempos en ms) porque el frontend la
 lee tal cual.
+
+Nota mínima (24 oct): una lección solo cuenta como completada con al menos
+`PASSING_PERCENT` en el quiz; con menos hay que repetirla. Las misiones finales
+(id terminado en `-mision`) no tienen quiz y quedan fuera de esta regla.
 """
 
 from __future__ import annotations
@@ -22,6 +26,16 @@ from app.models.lesson_progress import LessonProgress
 
 LESSON_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,47}$")
 MAX_LESSONS = 200
+PASSING_PERCENT = 75  # 3 de 4 respuestas correctas
+MISSION_SUFFIX = "-mision"
+
+
+def is_mission(lesson_id: str) -> bool:
+    return lesson_id.endswith(MISSION_SUFFIX)
+
+
+def passed(lesson_id: str, percent: int) -> bool:
+    return is_mission(lesson_id) or percent >= PASSING_PERCENT
 
 
 def _ms(value: datetime) -> int:
@@ -40,7 +54,9 @@ def _round(value) -> int | None:
 
 def _public(row: LessonProgress) -> dict:
     data = {
-        "completed": row.completed,
+        # Las lecciones guardadas antes de la nota mínima con menos de 75 % no
+        # cuentan: el estudiante tiene que repetirlas (su mejor intento sigue ahí).
+        "completed": row.completed and passed(row.lesson_id, row.percent),
         "percent": row.percent,
         "xp": row.xp,
         "attempts": row.attempts,
@@ -67,6 +83,8 @@ def merge_lesson_progress(db: DbSession, user_id: int, lesson_id, report: dict) 
         return {"ok": False, "error": "Porcentaje inválido."}
     if xp is None or not 0 <= xp <= 200:
         return {"ok": False, "error": "XP inválido."}
+    if not passed(lesson_id, percent):
+        return {"ok": False, "error": f"Necesitas al menos {PASSING_PERCENT} % en el quiz para completar la lección."}
 
     previous = db.get(LessonProgress, (user_id, lesson_id))
     if previous is None:

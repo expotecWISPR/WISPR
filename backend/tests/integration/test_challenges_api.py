@@ -5,6 +5,8 @@ flags, descarga de archivos, ranking y progreso de lecciones — con la forma
 exacta de JSON que espera el frontend. No toca Supabase.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -15,8 +17,9 @@ import app.db.base  # noqa: F401 — registra TODOS los modelos antes de create_
 from app.core import rate_limit
 from app.core.sessions import create_session
 from app.db.session import Base, get_db
+from app.models.lesson_progress import LessonProgress
 from app.models.user import User
-from app.services import challenge_generator, challenges, scoring
+from app.services import challenge_generator, challenges, lessons, scoring
 from main import app
 
 TEMPLATE_XOR_FLAG = "WISPR{xor_de_un_byte_es_debil}"  # la de la plantilla: está en el repo
@@ -365,14 +368,35 @@ def test_progreso_de_lecciones_conserva_el_mejor_intento(client):
     ana = client.tokens["Ana"]
     first = client.post("/api/progress", headers=ana, json={"lessonId": "modulo-1", "percent": 80, "xp": 150, "attempts": 1, "badge": "Novato"})
     assert first.status_code == 200
-    worse = client.post("/api/progress", headers=ana, json={"lessonId": "modulo-1", "percent": 40, "xp": 90, "attempts": 2})
+    worse = client.post("/api/progress", headers=ana, json={"lessonId": "modulo-1", "percent": 76, "xp": 90, "attempts": 2})
     progress = worse.json()["lessonProgress"]["modulo-1"]
     assert (progress["percent"], progress["xp"], progress["attempts"], progress["badge"]) == (80, 150, 2, "Novato")
 
     bad = client.post("/api/progress", headers=ana, json={"lessonId": "../x", "percent": 50, "xp": 10})
     assert bad.status_code == 400 and bad.json() == {"ok": False, "error": "Lección inválida."}
     assert client.post("/api/progress", headers=ana, json={"lessonId": "modulo-2", "percent": 101, "xp": 10}).json()["error"] == "Porcentaje inválido."
-    assert client.post("/api/progress", headers=ana, json={"lessonId": "modulo-2", "percent": 50, "xp": 201}).json()["error"] == "XP inválido."
+    assert client.post("/api/progress", headers=ana, json={"lessonId": "modulo-2", "percent": 90, "xp": 201}).json()["error"] == "XP inválido."
+
+
+def test_leccion_con_menos_de_75_hay_que_repetirla(client):
+    ana = client.tokens["Ana"]
+    # Con menos de 3/4 no se guarda: el estudiante tiene que repetir la lección.
+    low = client.post("/api/progress", headers=ana, json={"lessonId": "m2-wep", "percent": 74, "xp": 47})
+    assert low.status_code == 400
+    assert low.json() == {"ok": False, "error": "Necesitas al menos 75 % en el quiz para completar la lección."}
+    assert client.post("/api/progress", headers=ana, json={"lessonId": "m2-wep", "percent": 75, "xp": 47}).json()["lessonProgress"]["m2-wep"]["completed"] is True
+
+    # Las misiones no tienen quiz (su nota mínima es 40): quedan fuera de la regla.
+    mission = client.post("/api/progress", headers=ana, json={"lessonId": "m2-mision", "percent": 40, "xp": 70, "badge": "Guardián Wi-Fi"})
+    assert mission.json()["lessonProgress"]["m2-mision"]["completed"] is True
+
+    # Una lección guardada antes de la regla con 50 % deja de contar como completada
+    # (se conserva su intento); una misión vieja con 40 % sigue completada.
+    now = datetime.now(timezone.utc)
+    old = LessonProgress(user_id=1, lesson_id="m2-wpa3", completed=True, percent=50, xp=35, attempts=1, completed_at=now, updated_at=now)
+    assert lessons._public(old)["completed"] is False and lessons._public(old)["percent"] == 50
+    old_mission = LessonProgress(user_id=1, lesson_id="m1-mision", completed=True, percent=40, xp=70, attempts=0, completed_at=now, updated_at=now)
+    assert lessons._public(old_mission)["completed"] is True
 
 
 def test_reto_wifi_estatico_se_descarga_y_se_gana(client):

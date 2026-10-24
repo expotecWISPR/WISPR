@@ -247,7 +247,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 22 de octubre de 2026.
+**Última actualización:** 24 de octubre de 2026.
 
 ## Decisiones de arquitectura tomadas
 
@@ -742,6 +742,19 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   - Web: la pestaña Retos se divide en «Por resolver · N de 15» y «Resueltos» (cerrada por
     defecto, botón «Ver resueltos»); el formulario dice cuántos espacios quedan y se deshabilita
     con la lista llena. 245 tests; probado en Chromium (escritorio y 390 px).
+* **Nota mínima en las lecciones de Teoría (24 oct).** Con menos de **75 %** en el quiz la lección
+  no se guarda y hay que repetirla (lecciones de 4 preguntas: 3/4; de 5: 4/5). Backend
+  (`lessons.py`, `PASSING_PERCENT`): `POST /api/progress` rechaza menos de 75 % y las lecciones
+  guardadas antes con menos de 75 % ya no cuentan como completadas (se conserva el intento).
+  Las misiones (id `*-mision`) quedan fuera: no tienen quiz y su nota mínima es 40. 249 tests.
+* **Íconos en vez de emojis + títulos legibles (24 oct) — solo frontend.** Toda la app usa íconos
+  de línea de Lucide (`WISPR-frontend/icons.js`, solo los que se usan; `icon(nombre)` en `app.js`):
+  en los datos de Teoría va el **nombre** (`icon: "shield"`), nunca un emoji. Íconos grandes del
+  contenido en chip duotono con el color del `tone` de la tarjeta (las prácticas no llevan tono:
+  el color no delata la respuesta); degradado solo en logros (insignia, lección completada). Los
+  `h3` pasaron de Gasoek One a Teachers en negrita (Gasoek se empasta en tamaño chico). Guía para
+  el equipo actualizada en `docs/MODULOS-TEORIA.md` §9. **Ojo:** `server.js` carga la lista de
+  archivos que sirve al arrancar: tras agregar un archivo estático hay que reiniciar Node.
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
