@@ -100,7 +100,7 @@ async def register(request: Request, db: Session = Depends(get_db)):
         auth_flow.discard_pending_registration(draft["token"])
         raise
 
-    mail = send_verification_code(draft["email"], draft.pop("code"))
+    mail = send_verification_code(draft["email"], draft.pop("code"), "register")
     if not mail.ok:
         auth_flow.discard_pending_registration(draft["token"])
         return JSONResponse(status_code=502, content={"ok": False, "error": "No se pudo enviar el correo de verificación."})
@@ -131,7 +131,7 @@ async def resend(request: Request):
     draft = auth_flow.resend_verification_code(body.get("token"))
     if not draft["ok"]:
         return JSONResponse(status_code=400, content=draft)
-    mail = send_verification_code(draft["email"], draft["code"])
+    mail = send_verification_code(draft["email"], draft["code"], "register")
     if not mail.ok:
         return JSONResponse(status_code=502, content={"ok": False, "error": "No se pudo enviar el correo de verificación."})
     return {"ok": True, "dev": mail.dev, "devCode": mail.code if mail.dev else None}
@@ -149,7 +149,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
         token = create_session(db, int(draft["player"]["playerId"]))
         return {"ok": True, "player": draft["player"], "sessionToken": token}
 
-    mail = send_verification_code(draft["email"], draft.pop("code"))
+    mail = send_verification_code(draft["email"], draft.pop("code"), "login")
     if not mail.ok:
         auth_flow.discard_pending_login(draft["token"])
         return JSONResponse(status_code=502, content={"ok": False, "error": "No se pudo enviar el correo de verificación."})
@@ -180,7 +180,7 @@ async def login_resend(request: Request, db: Session = Depends(get_db)):
     draft = auth_flow.resend_login_code(body.get("token"), db)
     if not draft["ok"]:
         return JSONResponse(status_code=400, content=draft)
-    mail = send_verification_code(draft["email"], draft["code"])
+    mail = send_verification_code(draft["email"], draft["code"], "login")
     if not mail.ok:
         return JSONResponse(status_code=502, content={"ok": False, "error": "No se pudo enviar el correo de verificación."})
     return {"ok": True, "dev": mail.dev, "devCode": mail.code if mail.dev else None}
