@@ -30,7 +30,7 @@ from app.core.rate_limit import limit_per_ip
 from app.core.sessions import create_session, resolve_session, revoke_session
 from app.db.session import get_db
 from app.models.user import User
-from app.services import admin, auth_flow
+from app.services import admin, auth_flow, avatars
 from app.services.email import send_verification_code
 
 router = APIRouter(tags=["players"])
@@ -203,6 +203,14 @@ async def change_password(
     )
     status = result.pop("status", 400)
     return result if result["ok"] else JSONResponse(status_code=status, content=result)
+
+
+@router.post("/avatar")
+async def set_avatar(request: Request, current_player: User = Depends(get_current_player), db: Session = Depends(get_db)):
+    """Cambia la foto de perfil por uno de los avatares fijos (o la inicial con null)."""
+    body = await _json_body(request)
+    result = avatars.set_avatar(db, current_player, body.get("avatar"))
+    return result if result["ok"] else JSONResponse(status_code=400, content=result)
 
 
 @router.post("/tour")

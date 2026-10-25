@@ -755,6 +755,13 @@ desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
   `h3` pasaron de Gasoek One a Teachers en negrita (Gasoek se empasta en tamaño chico). Guía para
   el equipo actualizada en `docs/MODULOS-TEORIA.md` §9. **Ojo:** `server.js` carga la lista de
   archivos que sirve al arrancar: tras agregar un archivo estático hay que reiniciar Node.
+* **Foto de perfil con avatares de Wisp (24 oct).** En Perfil el jugador elige uno de 7 avatares
+  (`WISPR-frontend/img/avatars/<id>.png`, fondo quitado, 256 px) o vuelve a su inicial. Columna
+  `users.avatar` (migración `a7d2e5c18f90`, **aplicada**), `POST /api/players/avatar` y lista fija
+  en `app/services/avatars.py` (rechaza cualquier otro valor: nadie mete una URL en el ranking de
+  otros). `avatar` viaja en `/me`, ranking, cuentas del admin y miembros de grupo; en el frontend
+  todas las iniciales pasan por `avatarEl()`. La lista de ids debe coincidir en los dos repos.
+  250 tests; probado de punta a punta con Supabase real (usuario temporal borrado).
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
@@ -782,8 +789,8 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    lanzar Electron desde ahí.
 2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
    usar el Session Pooler de Supabase (ver "Conexión a Supabase por IPv4"); (b) `alembic upgrade
-   head` (hay 5 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`,
-   `f4c1a8e93b26`) y
+   head` (hay 6 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`,
+   `f4c1a8e93b26`, `a7d2e5c18f90`) y
    `python -m app.db.seed_challenges` (14 retos); (c) construir la imagen de Kali
    **desde cero** (ver 7d); (d) arrancar Node desde una consola real o como servicio (en Windows,
    Node sin consola se cae con `AttachConsole failed` al cerrar una terminal — no afecta a Linux).

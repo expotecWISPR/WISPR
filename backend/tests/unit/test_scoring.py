@@ -141,7 +141,7 @@ def test_ranking_solo_estudiantes_ordenado_y_sin_datos_privados(db):
 
     ranking = scoring.ranking(db, current_user_id=1)
     assert [r["handle"] for r in ranking] == ["@beto", "@ana"]
-    assert ranking[0] == {"name": "Beto", "handle": "@beto", "score": 200, "solves": 1, "streak": 1, "current": False}
+    assert ranking[0] == {"name": "Beto", "handle": "@beto", "avatar": None, "score": 200, "solves": 1, "streak": 1, "current": False}
     assert ranking[1]["current"] is True
     for row in ranking:
         assert "email" not in row and "id" not in row and "playerId" not in row

@@ -444,3 +444,26 @@ def test_registro_repetido_al_mismo_correo_se_limita(client):
     assert blocked.status_code == 429
     # Otro correo desde la misma IP no se ve afectado (límite por correo, no global).
     assert client.post("/api/players/register", json={**body, "handle": "otro", "email": "otra@example.com"}).status_code == 200
+
+
+def test_avatar_de_perfil(client):
+    ana, beto = client.tokens["Ana"], client.tokens["Beto"]
+    # Sin elegir: null (el frontend muestra la inicial).
+    assert client.get("/api/players/me", headers=ana).json()["player"]["avatar"] is None
+
+    saved = client.post("/api/players/avatar", headers=ana, json={"avatar": "escudo"})
+    assert saved.status_code == 200 and saved.json() == {"ok": True, "avatar": "escudo"}
+    assert client.get("/api/players/me", headers=ana).json()["player"]["avatar"] == "escudo"
+    # Los demás lo ven en el ranking.
+    ranking = client.get("/api/ranking", headers=beto).json()["ranking"]
+    assert next(row for row in ranking if row["name"] == "Ana")["avatar"] == "escudo"
+
+    # Solo los avatares fijos: nada de URLs ni textos arbitrarios.
+    for bad in ("https://evil.example/x.png", "../../etc/passwd", "<img>", 5):
+        response = client.post("/api/players/avatar", headers=ana, json={"avatar": bad})
+        assert response.status_code == 400 and response.json()["error"] == "Avatar inválido."
+    assert client.get("/api/players/me", headers=ana).json()["player"]["avatar"] == "escudo"
+
+    # null vuelve a la inicial; sin sesión no se puede.
+    assert client.post("/api/players/avatar", headers=ana, json={"avatar": None}).json()["avatar"] is None
+    assert client.post("/api/players/avatar", json={"avatar": "router"}).status_code == 401

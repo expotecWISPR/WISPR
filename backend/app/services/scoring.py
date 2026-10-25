@@ -193,6 +193,7 @@ def ranking(db: DbSession, current_user_id: int | None) -> list[dict]:
         {
             "name": user.full_name,
             "handle": user.username,
+            "avatar": user.avatar,
             "score": int(score or 0),
             "solves": int(solves or 0),
             "streak": current_streak(db, user.id),

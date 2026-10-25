@@ -58,6 +58,10 @@ class User(Base):
     # para que no se repita al entrar desde otro equipo o desde Electron.
     tour_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Foto de perfil: uno de los avatares fijos de app/services/avatars.py.
+    # NULL = se muestra la inicial del nombre.
+    avatar: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

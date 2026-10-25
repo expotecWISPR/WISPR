@@ -86,6 +86,7 @@ def public_member(user: User, solved: dict) -> dict:
         "playerId": str(user.id),
         "name": user.full_name,
         "handle": user.username,
+        "avatar": user.avatar,
         "email": user.email or "",
         "solves": len(solved),
         "score": sum(entry["points"] for entry in solved.values()),
