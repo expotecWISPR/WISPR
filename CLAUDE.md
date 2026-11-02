@@ -247,7 +247,8 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 24 de octubre de 2026.
+**Última actualización:** 1 de noviembre de 2026. Resumen vigente de estado, tecnologías reales,
+comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
 
 ## Decisiones de arquitectura tomadas
 
@@ -782,9 +783,9 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    dentro de WISPR (lo externo va al navegador del sistema), permisos negados, una sola instancia y
    pantalla propia de «sin conexión» con «Reintentar». Se borró `ipcHandlers.js` (no hace falta
    IPC). Probado con Playwright por CDP: sin servidor → pantalla offline; con servidor → carga
-   WISPR, la página no ve `require`/`process`, un enlace externo no se abre dentro. **Falta:**
-   probar la terminal Kali dentro de la app (debería funcionar igual: mismo origen que el
-   navegador) y, si se quiere, un instalador `.exe` (`electron-builder`). Ojo: en el entorno de
+   WISPR, la página no ve `require`/`process`, un enlace externo no se abre dentro. La terminal
+   Kali funciona dentro de la app (confirmado por el equipo, 1 nov). **Falta, si se quiere:** un
+   instalador `.exe` (`electron-builder`). Ojo: en el entorno de
    Claude Code dentro de VS Code está definida `ELECTRON_RUN_AS_NODE=1` → hay que quitarla para
    lanzar Electron desde ahí.
 2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
@@ -805,10 +806,10 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    | seccomp / AppArmor | Perfiles **por defecto** de Docker + `--cap-drop ALL`, `no-new-privileges`, `--read-only`, límites de memoria/CPU/procesos, red interna |
    | Docker Compose | `docker-compose.yml` vacío; los contenedores los crea Node |
    | CloudWatch | Sin configurar (parte del despliegue) |
-5. **Teoría: Módulos 4 (Ataques a Wi-Fi) y 6 (Análisis) los escribe el equipo.** El asistente NO
-   puede generar ese contenido (un filtro de seguridad cortó los intentos del 20 oct; no reintentar
-   reformulando). Sí puede revisar el código cuando el equipo lo escriba y probarlo en el navegador.
-   Guía del formato: `WISPR-frontend/docs/MODULOS-TEORIA.md`. Mientras tanto se ven como texto plano.
+5. ~~Teoría: Módulos 4 (Ataques a Wi-Fi) y 6 (Análisis)~~ ✅ Hechos (commit `70efe41` de
+   `WISPR-frontend`). El asistente NO genera ese contenido (un filtro de seguridad cortó los
+   intentos del 20 oct); sí puede revisar el código y probarlo. Guía del formato:
+   `WISPR-frontend/docs/MODULOS-TEORIA.md`.
 6. Después de EXPOTEC: 7e(b) mostrar en la UI el motivo del nivel; reto de profesor para un grupo
    (7f); S3 (9); archivos Wi-Fi por jugador (7c); Pandas (7e c); LoRA (8).
 
@@ -897,19 +898,21 @@ del profesor llegan a `expociber202510@gmail.com`.
    "Progreso técnico"). Falta: ~~(a) que el frontend avise al backend cuando el jugador abre una
    pista~~ ✅ Hecho (20 oct, pistas con costo — ver "Progreso técnico"); (b) mostrar en la UI el motivo del nivel (`reason` en
    `nextChallenge`, `levels` en `/me`); (c) Pandas/scikit-learn cuando haya datos reales de uso.
-7f. ~~Paneles de admin y profesor en FastAPI~~ ✅ Hecho (20 oct) — ver "Progreso técnico". Falta:
-   probarlo con la UI real (admin y profesor) y, si se quiere, que `POST /api/challenges/generate`
-   publique un reto para **un grupo** en vez de para todos los estudiantes.
+7f. ~~Paneles de admin y profesor en FastAPI~~ ✅ Hecho (20 oct) — ver "Progreso técnico". Las
+   interfaces de admin y profesor funcionan con la UI real (confirmado por el equipo, 1 nov). Falta,
+   si se quiere: que `POST /api/challenges/generate` publique un reto para **un grupo** en vez de
+   para todos los estudiantes.
 8. ~~Respaldo de `ai_advisor.py` si Together falla~~ ✅ Hecho (13 oct, plantillas). **Falta:** una
    `TOGETHER_API_KEY` válida en `backend/.env` y ver historias reales de la IA. El fine-tuning con
    LoRA queda fuera de esto; si se retoma, entrenar con `challenges/dataset/challenges_limpio.json`
    (no con el original) y revisar a mano los 117 retos del lote de IA que conservó el limpiador.
-9. Crear bucket S3 + rol IAM, integrar con `boto3` — incluye conectar
-   `challenge_generator.py` para subir los archivos generados a S3 en vez de dejarlos en
-   `challenges/generated/` local.
+9. **Fuera de EXPOTEC (decisión del 1 nov, ver `docs/ESTADO-PROYECTO.md`).** Crear bucket S3 + rol
+   IAM, integrar con `boto3` — incluye conectar `challenge_generator.py` para subir los archivos
+   generados a S3 en vez de dejarlos en `challenges/generated/` local. Solo se justifica con varias
+   instancias o si los archivos deben sobrevivir a la eliminación del servidor.
 10. Configurar la instancia EC2 siguiendo `docs/arquitectura_mvp.md`.
 11. ~~App de escritorio con Electron~~ ✅ Hecho (22 oct) — ver "RETOMAR AQUÍ" y `electron/README.md`.
-12. **Teoría, Módulos 4 y 6** — contenido a cargo del equipo (ver "RETOMAR AQUÍ").
+12. ~~Teoría, Módulos 4 y 6~~ ✅ Hechos — ver "RETOMAR AQUÍ".
 
 ---
 
