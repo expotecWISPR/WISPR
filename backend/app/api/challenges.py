@@ -31,7 +31,7 @@ from app.api.players import _json_body, get_current_player, get_optional_player
 from app.core import rate_limit
 from app.db.session import get_db
 from app.models.user import User
-from app.services import bonus, challenge_factory, challenges, hints, instances, lessons, scoring
+from app.services import bonus, challenge_factory, challenges, hints, instances, lessons, ratings, scoring
 
 router = APIRouter(tags=["challenges"])
 
@@ -86,6 +86,25 @@ def unlock_hint(challenge_id: str, index: str, db: Session = Depends(get_db), pl
     result = hints.unlock(db, player.id, challenge, index)
     status = result.pop("status", 200)
     return result if result["ok"] else JSONResponse(status_code=status, content=result)
+
+
+@router.post("/challenges/{challenge_id}/rating")
+async def rate_challenge(
+    challenge_id: str, request: Request, db: Session = Depends(get_db), player: User = Depends(get_current_player)
+):
+    """Estrellas del jugador para un reto que ya resolvió."""
+    body = await _json_body(request)
+    result = ratings.rate(db, player, challenge_id, body.get("stars"))
+    status = result.pop("status", 200)
+    return result if result["ok"] else JSONResponse(status_code=status, content=result)
+
+
+@router.get("/challenges/ratings")
+def challenge_ratings(db: Session = Depends(get_db), player: User = Depends(get_current_player)):
+    """Promedio por reto. Solo para profesores y admin."""
+    if player.role not in ("profesor", "admin"):
+        return JSONResponse(status_code=403, content={"ok": False, "error": "Acceso solo para profesores o administradores."})
+    return {"ok": True, "ratings": ratings.summary(db)}
 
 
 @router.get("/challenges/options")

@@ -437,7 +437,7 @@ def test_mas_de_30_envios_por_minuto_responde_429(client):
 
 
 def test_registro_repetido_al_mismo_correo_se_limita(client):
-    body = {"name": "Spam", "handle": "spam", "gender": "otro", "password": "clave12345", "email": "victima@example.com"}
+    body = {"name": "Spam", "handle": "spam", "gender": "otro", "password": "Clave$Segura47", "email": "victima@example.com"}
     for i in range(3):
         assert client.post("/api/players/register", json={**body, "handle": f"spam{i}"}).status_code == 200
     blocked = client.post("/api/players/register", json={**body, "handle": "spam9"})

@@ -179,19 +179,19 @@ def test_reset_y_cambio_obligatorio_de_contrasena(client):
     assert me["player"]["mustChangePassword"] is True
 
     url, headers = "/api/players/change-password", {"Authorization": f"Bearer {here}"}
-    wrong = client.post(url, headers=headers, json={"currentPassword": "otra", "newPassword": "NuevaClave123"})
+    wrong = client.post(url, headers=headers, json={"currentPassword": "otra", "newPassword": "NuevaClave#123"})
     assert wrong.status_code == 401 and wrong.json()["error"] == "La contraseña actual no es correcta."
     short = client.post(url, headers=headers, json={"currentPassword": temp, "newPassword": "corta"})
-    assert short.status_code == 400 and short.json()["error"] == "La nueva contraseña debe tener al menos 8 caracteres."
+    assert short.status_code == 400 and short.json()["error"] == "La nueva contraseña debe tener al menos 10 caracteres."
     same = client.post(url, headers=headers, json={"currentPassword": temp, "newPassword": temp})
     assert same.status_code == 400
 
-    ok = client.post(url, headers=headers, json={"currentPassword": temp, "newPassword": "NuevaClave123"})
+    ok = client.post(url, headers=headers, json={"currentPassword": temp, "newPassword": "NuevaClave#123"})
     assert ok.status_code == 200 and ok.json()["player"]["mustChangePassword"] is False
     # Este dispositivo sigue dentro; el otro quedó afuera.
     assert client.get("/api/players/me", headers=headers).status_code == 200
     assert client.get("/api/players/me", headers={"Authorization": f"Bearer {other}"}).status_code == 401
-    assert auth_flow.begin_login({"handle": "ana", "password": "NuevaClave123"}, client.db())["ok"] is True
+    assert auth_flow.begin_login({"handle": "ana", "password": "NuevaClave#123"}, client.db())["ok"] is True
 
 
 def test_eliminar_cuenta_borra_su_rastro_pero_conserva_los_grupos_del_profesor(client):

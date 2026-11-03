@@ -68,7 +68,7 @@ def _pending_code(store: dict, token: str) -> str:
 def test_flujo_completo_registro_verificacion_me_logout():
     register_response = client.post(
         "/api/players/register",
-        json={"name": "Ana Pérez", "handle": "ana", "gender": "femenino", "password": "clave12345", "email": "ana@est.cedesdonbosco.ed.cr"},
+        json={"name": "Ana Pérez", "handle": "ana", "gender": "femenino", "password": "Clave$Segura47", "email": "ana@est.cedesdonbosco.ed.cr"},
     )
     assert register_response.status_code == 200
     body = register_response.json()
@@ -107,11 +107,11 @@ def test_me_sin_token_responde_401_con_auth_required():
 def test_login_con_mfa_de_punta_a_punta():
     register = client.post(
         "/api/players/register",
-        json={"name": "Beto", "handle": "beto", "gender": "masculino", "password": "clave12345", "email": "beto@est.cedesdonbosco.ed.cr"},
+        json={"name": "Beto", "handle": "beto", "gender": "masculino", "password": "Clave$Segura47", "email": "beto@est.cedesdonbosco.ed.cr"},
     )
     client.post("/api/players/verify", json={"token": register.json()["token"], "code": _pending_code(auth_flow._pending_registrations, register.json()["token"])})
 
-    login = client.post("/api/players/login", json={"handle": "beto", "password": "clave12345"})
+    login = client.post("/api/players/login", json={"handle": "beto", "password": "Clave$Segura47"})
     assert login.status_code == 200
     login_body = login.json()
     assert login_body["pending"] is True

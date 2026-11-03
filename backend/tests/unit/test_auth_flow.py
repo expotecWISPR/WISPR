@@ -12,16 +12,18 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import settings
+from app.core.security import hash_password
 from app.core.sessions import create_session, resolve_session, revoke_session
 from app.db.session import Base
 from app.models.user import User
-from app.services import auth_flow
+from app.services import admin_voucher, auth_flow
 
 VALID_REGISTRATION = {
     "name": "Ana Pérez",
     "handle": "ana",
     "gender": "femenino",
-    "password": "clave1234",
+    "password": "Clave$Segura47",
     "email": "ana@est.cedesdonbosco.ed.cr",
 }
 
@@ -100,7 +102,7 @@ class TestBeginRegistrationValidaciones:
 
     def test_rechaza_contrasena_corta(self, db):
         draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": "abc1234"}, db)
-        assert draft == {"ok": False, "error": "La contraseña debe tener al menos 8 caracteres."}
+        assert draft == {"ok": False, "error": "La contraseña debe tener al menos 10 caracteres."}
 
     def test_rechaza_contrasena_vacia(self, db):
         draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": ""}, db)
@@ -110,6 +112,34 @@ class TestBeginRegistrationValidaciones:
     def test_rechaza_contrasena_demasiado_larga_sin_error_500(self, db, password):
         draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": password}, db)
         assert draft == {"ok": False, "error": "La contraseña no puede tener más de 64 caracteres."}
+
+    @pytest.mark.parametrize(
+        ("password", "error"),
+        [
+            ("clave$segura47", "La contraseña debe combinar mayúsculas y minúsculas."),
+            ("CLAVE$SEGURA47", "La contraseña debe combinar mayúsculas y minúsculas."),
+            ("Clave$Segura", "La contraseña debe incluir al menos un número."),
+            ("ClaveSegura47", "La contraseña debe incluir al menos un símbolo."),
+            ("Ana$Segura47", "La contraseña no puede contener tu nombre, tu usuario ni tu correo."),
+            ("Perez$Segura47", "La contraseña no puede contener tu nombre, tu usuario ni tu correo."),
+            ("Password$2026", "La contraseña es demasiado común o predecible. Prueba otra."),
+            ("Mi$Qwerty2026", "La contraseña es demasiado común o predecible. Prueba otra."),
+            ("Claveeee$47", "La contraseña es demasiado común o predecible. Prueba otra."),
+        ],
+    )
+    def test_rechaza_contrasena_insegura(self, password, error):
+        identifiers = ("Ana Perez", "ana", "ana@est.cedesdonbosco.ed.cr")
+        assert auth_flow.password_error(password, identifiers) == error
+
+    def test_compara_con_el_usuario_guardado_con_arroba(self):
+        assert auth_flow.password_error("Beto$Segura47", ("@beto",)) == "La contraseña no puede contener tu nombre, tu usuario ni tu correo."
+
+    def test_el_registro_compara_la_contrasena_con_los_datos_de_la_cuenta(self, db):
+        draft = auth_flow.begin_registration({**VALID_REGISTRATION, "password": "Ana$Segura47"}, db)
+        assert draft == {"ok": False, "error": "La contraseña no puede contener tu nombre, tu usuario ni tu correo."}
+
+    def test_acepta_contrasena_segura(self):
+        assert auth_flow.password_error("Clave$Segura47", ("Ana Perez", "ana", "ana@example.com")) is None
 
     def test_rechaza_correo_de_mas_de_254_caracteres(self, db):
         draft = auth_flow.begin_registration({**VALID_REGISTRATION, "email": "a" * 300 + "@example.com"}, db)
@@ -170,9 +200,16 @@ class TestCompleteRegistration:
 
 
 class TestLoginConMfa:
+    def test_una_cuenta_vieja_con_contrasena_debil_sigue_entrando(self, db):
+        _register_and_verify(db)
+        user = db.query(User).filter_by(username="@ana").one()
+        user.password_hash = hash_password("vieja123")
+        db.commit()
+        assert auth_flow.begin_login({"handle": "ana", "password": "vieja123"}, db)["ok"] is True
+
     def test_credenciales_correctas_piden_codigo(self, db):
         _register_and_verify(db)
-        draft = auth_flow.begin_login({"handle": "ana", "password": "clave1234"}, db)
+        draft = auth_flow.begin_login({"handle": "ana", "password": "Clave$Segura47"}, db)
         assert draft["ok"] is True
         assert "token" in draft and "code" in draft
 
@@ -187,18 +224,81 @@ class TestLoginConMfa:
 
     def test_login_completo_con_codigo_correcto(self, db):
         _register_and_verify(db)
-        draft = auth_flow.begin_login({"handle": "ana", "password": "clave1234"}, db)
+        draft = auth_flow.begin_login({"handle": "ana", "password": "Clave$Segura47"}, db)
         result = auth_flow.complete_login(draft["token"], draft["code"], db)
         assert result["ok"] is True
         assert result["player"]["handle"] == "@ana"
 
-    def test_admin_no_pasa_por_mfa(self, db):
+
+class TestVoucherDeAdmin:
+    def _admin(self, db, with_voucher=True):
         player = _register_and_verify(db)
         user = db.get(User, int(player["playerId"]))
         user.role = "admin"
         db.commit()
-        result = auth_flow.begin_login({"handle": "ana", "password": "clave1234"}, db)
-        assert result == {"ok": True, "admin": True, "player": result["player"]}
+        return user, admin_voucher.issue(db, user) if with_voucher else None
+
+    def _begin(self, db):
+        return auth_flow.begin_login({"handle": "ana", "password": "Clave$Segura47"}, db)
+
+    def test_la_contrasena_sola_no_da_acceso_ni_datos(self, db):
+        self._admin(db)
+        draft = self._begin(db)
+        assert draft == {"ok": True, "voucherRequired": True, "token": draft["token"]}
+
+    def test_sin_voucher_emitido_el_admin_no_entra(self, db):
+        self._admin(db, with_voucher=False)
+        draft = self._begin(db)
+        assert draft["ok"] is False and "token" not in draft
+
+    def test_voucher_correcto_entra_aunque_venga_en_minusculas_y_con_espacios(self, db):
+        _, voucher = self._admin(db)
+        result = auth_flow.complete_voucher_login(self._begin(db)["token"], f"  {voucher.lower()} ", db)
+        assert result["ok"] is True and result["player"]["role"] == "admin"
+
+    def test_el_token_sirve_una_sola_vez(self, db):
+        _, voucher = self._admin(db)
+        token = self._begin(db)["token"]
+        assert auth_flow.complete_voucher_login(token, voucher, db)["ok"] is True
+        assert auth_flow.complete_voucher_login(token, voucher, db)["ok"] is False
+
+    @pytest.mark.parametrize("wrong", ["", None, "WISPR-AAAA", "A" * 500])
+    def test_voucher_incorrecto_no_entra(self, db, wrong):
+        self._admin(db)
+        result = auth_flow.complete_voucher_login(self._begin(db)["token"], wrong, db)
+        assert result == {"ok": False, "error": "Voucher incorrecto."}
+
+    def test_los_intentos_fallidos_bloquean_la_cuenta(self, db):
+        user, voucher = self._admin(db)
+        token = self._begin(db)["token"]
+        for _ in range(settings.OTP_MAX_ATTEMPTS):
+            result = auth_flow.complete_voucher_login(token, "MAL", db)
+        assert result["ok"] is False
+        assert auth_flow.complete_voucher_login(token, voucher, db)["ok"] is False
+        assert self._begin(db).get("locked") is True
+
+    def test_un_voucher_de_otra_persona_o_de_antes_no_sirve(self, db):
+        user, old = self._admin(db)
+        admin_voucher.issue(db, user)
+        result = auth_flow.complete_voucher_login(self._begin(db)["token"], old, db)
+        assert result == {"ok": False, "error": "Voucher incorrecto."}
+
+    def test_el_voucher_no_se_guarda_en_claro_ni_viaja_en_el_perfil(self, db):
+        user, voucher = self._admin(db)
+        assert voucher not in user.admin_voucher_hash
+        assert "admin_voucher_hash" not in auth_flow.public_player(user, db)
+        assert "adminVoucherHash" not in auth_flow.public_player(user, db)
+
+    def test_solo_las_cuentas_admin_reciben_voucher(self, db):
+        user = db.get(User, int(_register_and_verify(db)["playerId"]))
+        with pytest.raises(ValueError):
+            admin_voucher.issue(db, user)
+
+    def test_un_estudiante_no_puede_usar_la_ruta_del_voucher(self, db):
+        _register_and_verify(db)
+        draft = self._begin(db)
+        assert "voucherRequired" not in draft
+        assert auth_flow.complete_voucher_login(draft["token"], "cualquiera", db)["ok"] is False
 
 
 class TestLoginEntradasExtremas:
@@ -227,7 +327,7 @@ class TestBloqueoPorFuerzaBruta:
         assert extrano["error"] == auth_flow.GENERIC_LOGIN_ERROR
 
         # El dueño (contraseña correcta) sí se entera de que está bloqueada.
-        dueno = auth_flow.begin_login({"handle": "ana", "password": "clave1234"}, db)
+        dueno = auth_flow.begin_login({"handle": "ana", "password": "Clave$Segura47"}, db)
         assert dueno["ok"] is False
         assert dueno.get("locked") is True
 

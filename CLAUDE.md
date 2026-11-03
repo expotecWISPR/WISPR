@@ -763,6 +763,50 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
   otros). `avatar` viaja en `/me`, ranking, cuentas del admin y miembros de grupo; en el frontend
   todas las iniciales pasan por `avatarEl()`. La lista de ids debe coincidir en los dos repos.
   250 tests; probado de punta a punta con Supabase real (usuario temporal borrado).
+* **Voucher para cuentas admin (2 nov).** Antes un admin entraba solo con contraseña, sin código
+  por correo. Ahora: contraseña → `voucherRequired` → `POST /api/players/login-voucher`; no hay
+  sesión hasta acertar el voucher. Propio de cada admin, de unos 100 bits, guardado con bcrypt en
+  `users.admin_voucher_hash` (migración `e8b3a6f42c17`, **aplicada**). Se emite solo desde el
+  servidor, `python -m app.services.admin_voucher usuario` (sin arroba: PowerShell la interpreta) en `backend/`, para que una sesión
+  robada no pueda cambiarlo; emitir uno nuevo invalida el anterior. Sin voucher emitido, el admin
+  **no entra** (falla cerrado). Cada voucher incorrecto cuenta para el bloqueo por fuerza bruta. El
+  asistente no debe generar ni ver el voucher: lo corre el dueño en su terminal. 291 tests.
+* **Informe al resolver un reto + estrellas (2 nov).** `showSolveReport()` de `app.js`, un pop-up
+  mediano sobre `showDialog`, muestra puntos, tiempo, pistas y desglose con el `breakdown` que
+  guarda el servidor; se reabre con «Ver informe» en el detalle del reto y no llama a `render()`, así
+  que la sesión de Kali sigue abierta. Estrellas de 1 a 5, opcionales, en la tabla nueva
+  `challenge_ratings` (migración `c5f81d3e7a24`, **aplicada**), `app/services/ratings.py`,
+  `POST /api/challenges/{id}/rating` (solo si ya lo resolvió; calificar otra vez reemplaza la nota)
+  y `GET /api/challenges/ratings` (solo profesor y admin, sin retos personales). `ratings` viaja en
+  `/me`. Promedios en el inicio de admin y profesor; los estudiantes no los ven para no influir en
+  sus votos. 274 tests. Probado contra Supabase real con un usuario temporal, ya borrado.
+* **Etiquetas de MITRE (2 nov) — solo frontend.** Tablas fijas en `app.js`: `MITRE_TECHNIQUES`,
+  `MITRE_BY_KIND` (por `challenge.kind`, así cubre los retos que crea la IA) y `MITRE_BY_LESSON`.
+  Etiqueta con enlace en cada reto y en la lección Evil Twin, y resumen en Perfil. Solo informan: no
+  cambian puntos ni dificultad. `related: true` marca los encajes aproximados (XOR, César,
+  codificación y WEP); ATT&CK cubre poco Wi-Fi, y Deauth usa CAPEC-604 porque no se pudo confirmar
+  una técnica de ATT&CK. Presentarlo como «técnicas relacionadas», no como cobertura o certificación
+  de MITRE. El aviso de copyright (`MITRE_NOTICE`) es obligatorio. Un tipo de reto nuevo debe
+  agregarse a `MITRE_BY_KIND` para mostrar etiqueta.
+* **Diálogos propios (2 nov) — solo frontend.** `showDialog()` y `confirmDelete()` de `app.js`
+  reemplazan a `alert`, `confirm` y `prompt` en toda la app; devuelven una promesa, así que se usan
+  con `await`. En lo peligroso el foco queda en Cancelar; la contraseña temporal no se cierra con
+  Esc ni al tocar afuera y trae «Copiar», con respaldo porque Electron niega el portapapeles.
+* **Contraseña segura al registrarse (2 nov).** Regla en `auth_flow.password_error` (la decide el
+  backend), copiada en `passwordRules()` de `WISPR-frontend/app.js` para guiar mientras se escribe:
+  10 a 64 caracteres, mayúscula, minúscula, número y símbolo, sin nombre, usuario ni correo, y sin
+  palabras comunes ni 4 caracteres iguales seguidos. Se aplica al registro y al cambio de
+  contraseña; **el login no**, así que las cuentas viejas siguen entrando. Las contraseñas
+  temporales del admin (`WISPR-xxxx-xxxx`) tampoco pasan por esta regla. Medidor sobrio: barra fina
+  y solo lo que falta. La revisión del navegador no envía nada al servidor. 263 tests.
+* **Botón de idioma español/inglés (2 nov) — solo frontend.** `WISPR-frontend/i18n.js` guarda un
+  diccionario español → inglés; `h()` pasa cada texto y `title`/`aria-label`/`placeholder`/`alt` por
+  `tr()`, y lo que falta se queda en español. El idioma se guarda en `localStorage`. En las claves,
+  `{0}` es cualquier texto y `{#0}` solo números: un patrón general como `{0} de {1}` traducía a
+  medias frases normales. Los textos que no pasan por `h()` (`textContent`, `term.writeln`) llevan
+  `tr()` a mano. Al cambiar de idioma se conserva la terminal abierta. Fuera de alcance: contenido
+  de las lecciones (unas 4.300 frases; los módulos 4 y 6 no los genera el asistente), historias de
+  los retos, `ctf` dentro de Kali y correos. **Ojo:** tras agregar `i18n.js` hay que reiniciar Node.
 * **Conexión a Supabase por IPv4 (20 oct).** En la PC Windows el backend daba
   `could not translate host name db.<ref>.supabase.co`: **no era la pausa**. Esa dirección solo
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el

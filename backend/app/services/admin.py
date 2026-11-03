@@ -9,8 +9,8 @@ directo), con estas diferencias deliberadas:
 - Quién pide la acción sale de la SESIÓN, nunca del `playerId` del cuerpo:
   el prototipo confiaba en ese campo, así que cualquiera que supiera el id
   de un admin podía actuar como admin.
-- Contraseña nueva de mínimo 8 caracteres (las reglas del registro, ver
-  auth_flow.password_error), no 4.
+- Contraseña nueva con las mismas reglas del registro (ver
+  auth_flow.password_error), no un mínimo de 4 caracteres.
 - Al bloquear, se cierran las sesiones del jugador. Su terminal Kali la
   cierra Node solo: revisa cada 60 s que la sesión siga valiendo (12 oct).
 - Sin historial de eventos de seguridad (`security`): el prototipo lo
@@ -164,7 +164,7 @@ def change_password(db: DbSession, user: User, current: str, new: str, session_t
     current, new = str(current or ""), str(new or "")
     if not verify_password(current, user.password_hash):
         return {"ok": False, "status": 401, "error": "La contraseña actual no es correcta."}
-    if error := auth_flow.password_error(new):
+    if error := auth_flow.password_error(new, (user.full_name, user.username, user.email)):
         return {"ok": False, "status": 400, "error": error.replace("La contraseña", "La nueva contraseña", 1)}
     if verify_password(new, user.password_hash):
         return {"ok": False, "status": 400, "error": "La nueva contraseña debe ser distinta de la actual."}

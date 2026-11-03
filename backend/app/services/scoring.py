@@ -29,7 +29,7 @@ from app.core.time_utils import as_utc
 from app.models.challenge import Challenge
 from app.models.submission import Solve, Submission
 from app.models.user import User
-from app.services import bonus, challenges, difficulty, flag_validator, hints
+from app.services import bonus, challenges, difficulty, flag_validator, hints, ratings
 
 log = logging.getLogger(__name__)
 
@@ -165,7 +165,8 @@ def player_progress(db: DbSession, user_id: int) -> dict:
     return {"solved": solved, "attempts": attempts, "submissions": submissions,
             "hints": hints.unlocked_by_challenge(db, user_id),
             "cleanStreak": bonus.clean_streak(db, user_id),
-            "timers": bonus.timers_by_challenge(db, user_id)}
+            "timers": bonus.timers_by_challenge(db, user_id),
+            "ratings": ratings.ratings_of_player(db, user_id)}
 
 
 def ranking(db: DbSession, current_user_id: int | None) -> list[dict]:

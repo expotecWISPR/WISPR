@@ -16,6 +16,15 @@ correr la app y qué falta. Si otro documento dice algo distinto, vale este.
 | Interfaces de profesor y admin | Listas | Confirmado por el equipo (1 nov) |
 | Teoría, módulos 1 a 6 | Listos | Los 6 módulos están en `WISPR-frontend/app.js` |
 | Foto de perfil con avatares de Wisp | Lista | Tests y prueba real con Supabase |
+| Botón de idioma español/inglés | Listo en la interfaz | Probado en navegador (2 nov) |
+| Contraseña segura al registrarse | Lista | Tests y prueba en navegador (2 nov) |
+| Etiquetas de técnicas de MITRE | Listas | Prueba en navegador (2 nov) |
+| Informe al resolver un reto y estrellas | Listos | Tests, navegador y Supabase real (2 nov) |
+| Voucher para cuentas admin | Listo | Tests y prueba en navegador (2 nov) |
+
+El botón traduce la interfaz: página de inicio, registro, retos, terminal, perfil, paneles, recorrido
+de Wisp y mensajes de error. Quedan en español el contenido de las lecciones de Teoría, las historias
+de los retos, lo que imprime `ctf` dentro de Kali y los correos.
 
 ## Tecnologías en uso
 
@@ -98,7 +107,10 @@ abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
    - Crear la EC2 y configurar nginx.
    - Activar HTTPS con `certbot` y poner el dominio.
    - Usar el Session Pooler de Supabase.
-   - Correr `alembic upgrade head` y `python -m app.db.seed_challenges`.
+   - Correr `alembic upgrade head` (la última migración es `e8b3a6f42c17`) y
+     `python -m app.db.seed_challenges`.
+   - Emitir el voucher de cada admin con `python -m app.services.admin_voucher usuario` (sin arroba),
+     desde `backend/`. Sin voucher, esa cuenta no puede entrar.
    - Construir la imagen de Kali desde cero.
    - Dejar Node funcionando como servicio.
 2. **Ensayar la demo completa en la máquina final:** registro, retos, terminal, profesor, admin y

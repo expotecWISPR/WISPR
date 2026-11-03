@@ -144,10 +144,9 @@ async def login(request: Request, db: Session = Depends(get_db)):
     if not draft["ok"]:
         return JSONResponse(status_code=401, content=draft)
 
-    # Admin: sesión inmediata, sin código ni correo.
-    if draft.get("admin"):
-        token = create_session(db, int(draft["player"]["playerId"]))
-        return {"ok": True, "player": draft["player"], "sessionToken": token}
+    # Admin: sin correo, pero sin sesión hasta dar su voucher (/login-voucher).
+    if draft.get("voucherRequired"):
+        return draft
 
     mail = send_verification_code(draft["email"], draft.pop("code"), "login")
     if not mail.ok:
@@ -169,6 +168,15 @@ async def login(request: Request, db: Session = Depends(get_db)):
 async def login_verify(request: Request, db: Session = Depends(get_db)):
     body = await _json_body(request)
     result = auth_flow.complete_login(body.get("token"), body.get("code"), db)
+    if result["ok"]:
+        result["sessionToken"] = create_session(db, int(result["player"]["playerId"]))
+    return JSONResponse(status_code=200 if result["ok"] else 400, content=result)
+
+
+@router.post("/login-voucher", dependencies=[_AUTH_LIMIT])
+async def login_voucher(request: Request, db: Session = Depends(get_db)):
+    body = await _json_body(request)
+    result = auth_flow.complete_voucher_login(body.get("token"), body.get("voucher"), db)
     if result["ok"]:
         result["sessionToken"] = create_session(db, int(result["player"]["playerId"]))
     return JSONResponse(status_code=200 if result["ok"] else 400, content=result)

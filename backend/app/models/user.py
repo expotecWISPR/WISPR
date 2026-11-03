@@ -43,6 +43,8 @@ class User(Base):
     # Un admin le emitió una contraseña temporal: debe cambiarla al entrar
     # (ver app/services/admin.py y POST /api/players/change-password).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Hash del voucher que pide el login de un admin (ver app/services/admin_voucher.py).
+    admin_voucher_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Bloqueo manual (lo marca un admin) vs. automático (fuerza bruta, ver
     # recordFailedLogin en el prototipo): distintos del `is_active` general.

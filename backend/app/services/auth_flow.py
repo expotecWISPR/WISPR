@@ -37,6 +37,7 @@ from app.core.security import hash_password, verify_password
 from app.core.sessions import is_locked
 from app.core.time_utils import as_utc
 from app.models.user import User
+from app.services import admin_voucher
 
 GENDERS = {"femenino", "masculino", "otro"}
 # Correo: solo los caracteres que de verdad usan los proveedores (el regex
@@ -52,11 +53,18 @@ MAX_EMAIL_LENGTH = 254
 # docs/pruebas_seguridad.md). Esto es la defensa del lado del servidor; el
 # frontend igual debe escapar.
 _NAME_RE = re.compile(r"^[\w .'-]+$")
-# Contraseña: mínimo 8 (recomendación NIST SP 800-63B; antes eran 4) y
-# máximo 64 caracteres / 72 bytes (límite de bcrypt: más largo daba error 500).
-MIN_PASSWORD_LENGTH = 8
+# Contraseña: mínimo 10 con mayúscula, minúscula, número y símbolo, sin datos
+# de la cuenta ni palabras comunes, y máximo 64 caracteres / 72 bytes (límite de
+# bcrypt: más largo daba error 500). passwordRules() de WISPR-frontend/app.js
+# aplica las mismas reglas: si se cambian aquí, hay que cambiarlas allá.
+MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 64
 MAX_PASSWORD_BYTES = 72
+_COMMON_PASSWORD_PARTS = (
+    "password", "contrasena", "contraseña", "qwerty", "123456", "abc123", "abcdef",
+    "wispr", "admin", "letmein", "iloveyou", "teamo",
+)
+_REPEATED_CHARACTER_RE = re.compile(r"(.)\1{3}")
 _HANDLE_INVALID_CHARS_RE = re.compile(r"[^a-z0-9._-]")
 
 # Mensaje ÚNICO para credenciales inválidas: no revela si la cuenta existe.
@@ -93,6 +101,7 @@ _DUMMY_HASH = hash_password("wispr-relleno-para-tiempo-constante")
 # En memoria, un diccionario por proceso — ver nota en el docstring del módulo.
 _pending_registrations: dict[str, PendingRegistration] = {}
 _pending_logins: dict[str, PendingLogin] = {}
+_pending_vouchers: dict[str, PendingLogin] = {}
 
 
 def normalize_handle(value: str) -> str:
@@ -112,13 +121,34 @@ def role_for_email(email: str) -> str | None:
     return None
 
 
-def password_error(password: str) -> str | None:
+def _personal_parts(identifiers: tuple[str, ...]) -> set[str]:
+    """Partes del nombre, usuario y correo que una contraseña no puede contener."""
+    parts: set[str] = set()
+    for identifier in identifiers:
+        local_part = str(identifier or "").casefold().lstrip("@").split("@")[0]
+        parts.update(part for part in re.split(r"[\s._-]+", local_part) if len(part) >= 3)
+    return parts
+
+
+def password_error(password: str, identifiers: tuple[str, ...] = ()) -> str | None:
     """Mensaje de error si la contraseña no cumple las reglas, o None si sirve.
-    Lo usan el registro y el cambio de contraseña (app/services/admin.py)."""
+    Lo usan el registro y el cambio de contraseña (app/services/admin.py). Las
+    cuentas que ya existen siguen entrando: el login no aplica estas reglas."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres."
     if len(password) > MAX_PASSWORD_LENGTH or len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
         return f"La contraseña no puede tener más de {MAX_PASSWORD_LENGTH} caracteres."
+    if not any(char.isupper() for char in password) or not any(char.islower() for char in password):
+        return "La contraseña debe combinar mayúsculas y minúsculas."
+    if not any(char.isdigit() for char in password):
+        return "La contraseña debe incluir al menos un número."
+    if all(char.isalnum() for char in password):
+        return "La contraseña debe incluir al menos un símbolo."
+    lowered = password.casefold()
+    if any(part in lowered for part in _personal_parts(identifiers)):
+        return "La contraseña no puede contener tu nombre, tu usuario ni tu correo."
+    if any(part in lowered for part in _COMMON_PASSWORD_PARTS) or _REPEATED_CHARACTER_RE.search(lowered):
+        return "La contraseña es demasiado común o predecible. Prueba otra."
     return None
 
 
@@ -127,7 +157,7 @@ def generate_code() -> str:
 
 
 def is_admin_player(user: User) -> bool:
-    """Un admin salta el MFA de login: basta usuario + contraseña correctos."""
+    """Un admin no usa el código por correo: su segundo paso es el voucher."""
     return user.role == "admin"
 
 
@@ -236,7 +266,7 @@ def begin_registration(data: dict, db: DbSession) -> dict:
         return {"ok": False, "error": "El usuario debe tener al menos 2 caracteres válidos."}
     if gender not in GENDERS:
         return {"ok": False, "error": "Selecciona un género."}
-    if error := password_error(password):
+    if error := password_error(password, (full_name, handle, email)):
         return {"ok": False, "error": error}
     if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_RE.match(email):
         return {"ok": False, "error": "Escribe un correo válido."}
@@ -332,7 +362,7 @@ def resend_verification_code(token: str) -> dict:
 def begin_login(data: dict, db: DbSession) -> dict:
     """Primer paso del login: usuario y contraseña correctos, pero todavía
     falta el código MFA — se pide en cada inicio de sesión, no solo la
-    primera vez (excepto cuentas admin, que no usan MFA)."""
+    primera vez. Las cuentas admin piden su voucher en vez del código."""
     handle = normalize_handle(data.get("handle") or "")
     password = str(data.get("password") or "")
     user = db.execute(select(User).where(User.username == handle)).scalar_one_or_none()
@@ -367,7 +397,7 @@ def begin_login(data: dict, db: DbSession) -> dict:
     clear_failed_logins(user, db)
 
     if is_admin_player(user):
-        return {"ok": True, "admin": True, "player": public_player(user, db)}
+        return _begin_voucher_login(user)
 
     if not user.email or not user.role:
         return {"ok": False, "error": "Esta cuenta no tiene un correo institucional verificado. Contacta al administrador del rango."}
@@ -386,6 +416,44 @@ def begin_login(data: dict, db: DbSession) -> dict:
         last_sent_at=now_ts,
     )
     return {"ok": True, "token": token, "email": user.email, "role": user.role, "code": _pending_logins[token].code}
+
+
+def _begin_voucher_login(user: User) -> dict:
+    # Sin voucher emitido, un admin no entra: falla cerrado en vez de volver a
+    # dejarlo pasar solo con la contraseña.
+    if not user.admin_voucher_hash:
+        return {"ok": False, "error": "Esta cuenta de administrador no tiene voucher. Emite uno desde el servidor."}
+    _prune(_pending_vouchers)
+    for existing_token, pending in list(_pending_vouchers.items()):
+        if pending.user_id == user.id:
+            del _pending_vouchers[existing_token]
+    token = secrets.token_hex(24)
+    _pending_vouchers[token] = PendingLogin(user_id=user.id, code="", expires_at=time.time() + settings.OTP_TTL_MINUTES * 60)
+    return {"ok": True, "voucherRequired": True, "token": token}
+
+
+def complete_voucher_login(token: str, voucher: str, db: DbSession) -> dict:
+    """Segundo paso del login de un admin. Cada voucher incorrecto cuenta para
+    el bloqueo por intentos fallidos de la cuenta."""
+    _prune(_pending_vouchers)
+    token = str(token or "")
+    pending = _pending_vouchers.get(token)
+    if pending is None:
+        return {"ok": False, "error": "La sesión ya no está disponible. Vuelve a iniciar sesión."}
+    user = db.get(User, pending.user_id)
+    if user is None or not is_admin_player(user) or is_locked(user, datetime.now(timezone.utc)):
+        del _pending_vouchers[token]
+        return {"ok": False, "error": "La sesión ya no está disponible. Vuelve a iniciar sesión."}
+    if not admin_voucher.matches(user, voucher):
+        pending.attempts += 1
+        record_failed_login(user, db)
+        if pending.attempts >= settings.OTP_MAX_ATTEMPTS:
+            del _pending_vouchers[token]
+            return {"ok": False, "error": "Demasiados intentos incorrectos. Vuelve a iniciar sesión."}
+        return {"ok": False, "error": "Voucher incorrecto."}
+    del _pending_vouchers[token]
+    clear_failed_logins(user, db)
+    return {"ok": True, "player": public_player(user, db)}
 
 
 def complete_login(token: str, code: str, db: DbSession) -> dict:
