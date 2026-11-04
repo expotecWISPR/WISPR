@@ -1,6 +1,6 @@
 # WISPR — Estado del proyecto
 
-Actualizado el 1 de noviembre de 2026. Resume qué funciona, qué tecnologías se usan de verdad, cómo
+Actualizado el 4 de noviembre de 2026. Resume qué funciona, qué tecnologías se usan de verdad, cómo
 correr la app y qué falta. Si otro documento dice algo distinto, vale este.
 
 ## Qué ya funciona
@@ -21,6 +21,7 @@ correr la app y qué falta. Si otro documento dice algo distinto, vale este.
 | Etiquetas de técnicas de MITRE | Listas | Prueba en navegador (2 nov) |
 | Informe al resolver un reto y estrellas | Listos | Tests, navegador y Supabase real (2 nov) |
 | Voucher para cuentas admin | Listo | Tests y prueba en navegador (2 nov) |
+| Plataforma web en AWS (`http://3.140.124.203`) | En línea, sin HTTPS | Abierta desde el navegador (4 nov) |
 
 El botón traduce la interfaz: página de inicio, registro, retos, terminal, perfil, paneles, recorrido
 de Wisp y mensajes de error. Quedan en español el contenido de las lecciones de Teoría, las historias
@@ -103,16 +104,12 @@ abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
 
 ### Imprescindible
 
-1. **Desplegar en AWS.** No hay registro de que esté hecho. Falta:
-   - Crear la EC2 y configurar nginx.
-   - Activar HTTPS con `certbot` y poner el dominio.
-   - Usar el Session Pooler de Supabase.
-   - Correr `alembic upgrade head` (la última migración es `e8b3a6f42c17`) y
-     `python -m app.db.seed_challenges`.
-   - Emitir el voucher de cada admin con `python -m app.services.admin_voucher usuario` (sin arroba),
-     desde `backend/`. Sin voucher, esa cuenta no puede entrar.
-   - Construir la imagen de Kali desde cero.
-   - Dejar Node funcionando como servicio.
+1. **Terminar el despliegue en AWS.** La web ya funciona en `http://3.140.124.203` (4 nov), con
+   FastAPI y Node como servicios y las imágenes de Kali construidas. Detalle y pasos en
+   `docs/DESPLIEGUE-AWS.md`. Falta:
+   - Probar la terminal Kali desde la web.
+   - Activar HTTPS con `certbot` y un dominio.
+   - Emitir un voucher nuevo para `admin_wispr`, porque el actual quedó escrito en un chat.
 2. **Ensayar la demo completa en la máquina final:** registro, retos, terminal, profesor, admin y
    teoría.
 

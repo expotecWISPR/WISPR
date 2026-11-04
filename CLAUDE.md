@@ -247,7 +247,7 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 1 de noviembre de 2026. Resumen vigente de estado, tecnologías reales,
+**Última actualización:** 4 de noviembre de 2026. Resumen vigente de estado, tecnologías reales,
 comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
 
 ## Decisiones de arquitectura tomadas
@@ -763,6 +763,13 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
   otros). `avatar` viaja en `/me`, ranking, cuentas del admin y miembros de grupo; en el frontend
   todas las iniciales pasan por `avatarEl()`. La lista de ids debe coincidir en los dos repos.
   250 tests; probado de punta a punta con Supabase real (usuario temporal borrado).
+* **Despliegue en AWS (4 nov) — la web ya está en línea en `http://3.140.124.203`.** EC2 Ubuntu
+  24.04 con Elastic IP; red creada por el equipo. nginx → FastAPI (`wispr-api.service`, un solo
+  proceso) y Node (`wispr-web.service`), los dos como servicios de systemd que arrancan solos.
+  Imágenes de Kali construidas. Usa **la misma Supabase que desarrollo**. Los campos de AWS del
+  `.env` van con relleno (S3 no está integrado). Pasos, problemas y mantenimiento en
+  `docs/DESPLIEGUE-AWS.md`. Falta: probar la terminal Kali desde la web, HTTPS con dominio, Electron
+  apuntando al servidor y un voucher nuevo para `admin_wispr` (el actual quedó escrito en un chat).
 * **Voucher para cuentas admin (2 nov).** Antes un admin entraba solo con contraseña, sin código
   por correo. Ahora: contraseña → `voucherRequired` → `POST /api/players/login-voucher`; no hay
   sesión hasta acertar el voucher. Propio de cada admin, de unos 100 bits, guardado con bcrypt en
