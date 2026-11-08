@@ -16,7 +16,8 @@ camino. Sirve para repetirlo en otra instancia o para entender la actual.
 | Dominio en `server_name` de nginx | Hecho (7 nov): tenía `tudominio.com` de ejemplo (ver [Problemas](#problemas-que-aparecieron)) |
 | DNS de `wispr.training` | Hecho (7 nov): solo responde `3.140.124.203` |
 | HTTPS | Hecho (7 nov): Let's Encrypt con `certbot`, `http` redirige a `https`. HSTS apagado (ver [HTTPS](#https)) |
-| Laboratorios que se liberan solos e ícono de la pestaña | En GitHub; falta `git pull` en la EC2 |
+| Laboratorios que se liberan solos e ícono de la pestaña | En la EC2 (7 nov) |
+| Arreglo de los puntos (`63a0e38`) | En GitHub; falta `git pull` en la EC2 |
 | Electron apuntando al servidor | Funciona con `WISPR_URL=https://wispr.training` (probado el 7 nov) |
 
 ## Cómo quedó
@@ -387,12 +388,11 @@ Cuesta aproximadamente US$1 más por día. Al terminar, se hace lo mismo con `t3
 
 ## Pendiente
 
-1. **Traer los laboratorios que se liberan solos y el ícono de la pestaña:** `cd ~/WISPR-frontend &&
-   git pull && sudo systemctl restart wispr-web` (no hace falta `npm ci`). Luego probar una sesión
-   completa por `https://wispr.training`: abrir un reto, pulsar «Abrir en Kali», usar `ctf show` y
-   `ctf submit`.
+1. **Traer el arreglo de los puntos** (`63a0e38`): `cd ~/WISPR-frontend && git pull && sudo
+   systemctl restart wispr-web` (no hace falta `npm ci`). Luego probar una sesión completa por
+   `https://wispr.training`: abrir un reto, pulsar «Abrir en Kali», usar `ctf show` y `ctf submit`.
 2. **Confirmar la renovación del certificado** si no se hizo: `sudo certbot renew --dry-run`.
-3. **Electron:** fijar la dirección del servidor dentro de la app antes de construir el instalador
-   (hoy se pasa con `WISPR_URL=https://wispr.training`).
+3. ~~**Electron:** fijar la dirección del servidor~~ Hecho (7 nov): el instalador abre siempre
+   `https://wispr.training` y se descarga desde `wispr.training/#descargar` (GitHub Releases).
 4. **HSTS**, después de EXPOTEC (ver [HTTPS](#https)).
 5. **Separar la base de producción** de la de desarrollo si se va a usar con estudiantes reales.

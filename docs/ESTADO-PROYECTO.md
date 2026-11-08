@@ -25,8 +25,13 @@ vale este.
 | Plataforma web en AWS (`https://wispr.training`) | En línea con HTTPS | `http` → 301 a `https`, `https` → 200, CORS correcto (7 nov) |
 | Dominio `wispr.training` y `www` | Apunta solo a la EC2 | DNS revisado en Google, Cloudflare y GoDaddy (7 nov) |
 | Terminal por el dominio | Node ya acepta `wispr.training` y `www` | Comprobado desde fuera el 7 nov; falta una sesión completa |
-| Ícono propio en la pestaña y en Electron | Listo en el código, falta en la EC2 | Node local y app de Electron contra el dominio (7 nov) |
-| Laboratorios que se liberan solos | Listo en el código, falta en la EC2 | Docker simulado, 22 comprobaciones (7 nov) |
+| Ícono propio en la pestaña y en Electron | En línea | El dominio sirve el favicon (7 nov) |
+| Laboratorios que se liberan solos | En la EC2 | Docker simulado, 22 comprobaciones; falta una sesión con Docker real |
+| Instalador de Windows (`WISPR-Setup.exe`) | Publicado en GitHub Releases `v1.0.0` | Enlace de descarga 200 y SHA-256 igual al compilado (7 nov); falta probar el asistente completo |
+| Página de descarga (`wispr.training/#descargar`) | En línea | Navegador: 3 anchos, 2 temas, inglés (7 nov) |
+| Portada: modo claro, responsive y textos nuevos | En línea | Navegador: 360 a 1366 px, 2 temas (7 nov) |
+| Cronómetro progresivo en los retos | En línea | Navegador, con tiempos simulados (7 nov) |
+| Puntos con bonos en Perfil, Inicio y encabezado | En GitHub, falta en la EC2 | Navegador con un jugador simulado (7 nov) |
 
 El botón traduce la interfaz: página de inicio, registro, retos, terminal, perfil, paneles, recorrido
 de Wisp y mensajes de error. Quedan en español el contenido de las lecciones de Teoría, las historias
@@ -121,8 +126,10 @@ abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
    HTTPS desde el 7 nov), con FastAPI y Node como servicios y las imágenes de Kali construidas. La IP
    sola (`http://3.140.124.203`) ya no sirve: se entra por el dominio. Detalle y pasos en
    `docs/DESPLIEGUE-AWS.md`. Falta:
-   - Traer a la EC2 los laboratorios que se liberan solos y el ícono de la pestaña (`git pull` en
-     `WISPR-frontend` y reiniciar `wispr-web`) y probar una sesión completa de la terminal.
+   - Traer a la EC2 el arreglo de los puntos (`63a0e38`): `cd ~/WISPR-frontend && git pull && sudo
+     systemctl restart wispr-web`. Probar una sesión completa de la terminal por el dominio.
+   - Probar el instalador completo: descargarlo desde `wispr.training/#descargar`, instalar, entrar
+     y abrir la terminal Kali.
    - Confirmar que el certificado se renueva solo: `sudo certbot renew --dry-run`.
    - Emitir un voucher nuevo para `admin_wispr`, porque el actual quedó escrito en un chat.
 2. **Preparar la EC2 para el día de EXPOTEC.** Cada laboratorio Kali puede usar hasta ~0,9 GB de
@@ -141,7 +148,8 @@ abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
 
 ### Opcional
 
-- **Instalador `.exe`:** solo hace falta para instalar la app en otras computadoras.
+- **Firmar el instalador:** sin firma, Windows muestra «Windows protegió su PC» la primera vez (la
+  página de descarga lo explica). Un certificado cuesta entre US$100 y US$400 al año.
 - **Página más liviana:**
   - Activar `gzip` en nginx para JS, CSS y JSON. Hoy la EC2 los manda sin comprimir (medido el
     7 nov): `app.js` bajaría de 749 KB a 187 KB y `style.css`, de 182 KB a 35 KB.

@@ -821,6 +821,25 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
   ventana. Probado: Node temporal sirve los dos PNG; la app de Electron contra `https://wispr.training`
   muestra el alien en la barra de tareas. Límite: anclar `npm start` a la barra fija `electron.exe`
   (ícono de Electron); eso solo lo arregla un instalador.
+* **Instalador de Windows + página de descarga (7 nov).** `npm run dist` en `electron/`
+  (electron-builder 26.18.0, NSIS en español, por usuario, sin permisos de administrador) genera
+  `dist/WISPR-Setup.exe` (~115 MB, **sin firma**: Windows avisa la primera vez). La app instalada
+  abre siempre `https://wispr.training` e ignora `WISPR_URL` (`app.isPackaged`); `npm start` sigue
+  con el servidor local. **Un cambio en la web no obliga a recompilar**: la app carga la página del
+  servidor. Publicado en GitHub Releases del repo `WISPR` (`v1.0.0`). La web tiene una pantalla
+  pública «Descargar» (`downloadView()` en `app.js`, también `wispr.training/#descargar`) que enlaza a
+  `releases/latest/download/WISPR-Setup.exe`, con pasos, aviso de Windows explicado y preguntas
+  frecuentes; no aparece dentro de la app (`window.wisprDesktop`). Versión nueva: subir `version`
+  en `electron/package.json` y `DESKTOP_DOWNLOAD` en `app.js`, `npm run dist`, `gh release create`.
+* **Portada, cronómetro y puntos (7 nov) — solo frontend.** Portada: «Wireless Security Training»,
+  descripción nueva, sin el aviso de MITRE en el pie (sigue en Perfil, junto a las etiquetas), modo
+  claro completo (antes solo cambiaba el fondo; bloque «Landing en modo claro» de `style.css`),
+  responsive (barra en dos filas hasta 980 px, compacta en celular, fondo de borde a borde) y
+  tarjetas de Servicios de a una girada. Cronómetro: el anillo se **llena** con el tiempo (antes se
+  vaciaba y parecía cuenta regresiva). **Puntos:** `stats()` sumaba los puntos **base** de cada reto,
+  así que los bonos y descuentos se veían en el ranking pero no en Perfil, Inicio ni el encabezado;
+  ahora suma `app.solved[id].points` (= `solves.points` del servidor) y el ranking se recarga al
+  resolver.
 * **Voucher para cuentas admin (2 nov).** Antes un admin entraba solo con contraseña, sin código
   por correo. Ahora: contraseña → `voucherRequired` → `POST /api/players/login-voucher`; no hay
   sesión hasta acertar el voucher. Propio de cada admin, de unos 100 bits, guardado con bcrypt en
@@ -880,9 +899,10 @@ mantenimiento: `docs/DESPLIEGUE-AWS.md`. Lo que falta para EXPOTEC, en orden:
 2. ~~HTTPS con `certbot`~~ ✅ Hecho (7 nov): `https://wispr.training`. HSTS apagado a propósito.
    No se pudo comprobar desde fuera que la renovación funcione: correr `sudo certbot renew --dry-run`
    en la EC2 si no se hizo.
-3. **Laboratorios e ícono en la EC2:** `cd ~/WISPR-frontend && git pull && sudo systemctl restart
-   wispr-web` (trae los laboratorios que se liberan solos y el ícono de la pestaña) y probar una
-   sesión completa de la terminal con Docker real.
+3. **Arreglo de puntos en la EC2:** los laboratorios, el ícono, la portada nueva y la página de
+   descarga ya están en línea (comprobado desde fuera el 7 nov); falta el commit `63a0e38`:
+   `cd ~/WISPR-frontend && git pull && sudo systemctl restart wispr-web`. Probar una sesión completa
+   de la terminal con Docker real y el instalador (descargar → instalar → entrar → Kali).
 4. **El día de EXPOTEC:** t3.large + `MAX_LAB_ENVIRONMENTS=6`; volver a t3.medium después.
 5. **Voucher nuevo para `admin_wispr`** (el actual quedó escrito en un chat). Lo emite el dueño.
 6. **Ensayo completo de la demo** por el dominio: registro → retos → terminal (`ctf hint`,
@@ -907,8 +927,8 @@ Orden acordado el 22 oct:
    pantalla propia de «sin conexión» con «Reintentar». Se borró `ipcHandlers.js` (no hace falta
    IPC). Probado con Playwright por CDP: sin servidor → pantalla offline; con servidor → carga
    WISPR, la página no ve `require`/`process`, un enlace externo no se abre dentro. La terminal
-   Kali funciona dentro de la app (confirmado por el equipo, 1 nov). **Falta, si se quiere:** un
-   instalador `.exe` (`electron-builder`). Ojo: en el entorno de
+   Kali funciona dentro de la app (confirmado por el equipo, 1 nov). Instalador `.exe` ✅ hecho el
+   7 nov (ver "Progreso técnico"). Ojo: en el entorno de
    Claude Code dentro de VS Code está definida `ELECTRON_RUN_AS_NODE=1` → hay que quitarla para
    lanzar Electron desde ahí.
 2. ~~Despliegue en AWS (Persona 2)~~ ✅ Hecho (4 nov) — ver `docs/DESPLIEGUE-AWS.md`.
