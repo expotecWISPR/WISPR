@@ -18,12 +18,12 @@ Para apuntar al servidor real, la variable `WISPR_URL`:
 
 ```powershell
 # Windows (PowerShell)
-$env:WISPR_URL = "https://wispr.ejemplo.com"; npm start
+$env:WISPR_URL = "https://wispr.training"; npm start
 ```
 
 ```bash
 # Linux / macOS
-WISPR_URL=https://wispr.ejemplo.com npm start
+WISPR_URL=https://wispr.training npm start
 ```
 
 Si el servidor no responde, la app muestra «No se pudo conectar con WISPR» con un botón

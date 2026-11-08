@@ -22,9 +22,10 @@ vale este.
 | Etiquetas de técnicas de MITRE | Listas | Prueba en navegador (2 nov) |
 | Informe al resolver un reto y estrellas | Listos | Tests, navegador y Supabase real (2 nov) |
 | Voucher para cuentas admin | Listo | Tests y prueba en navegador (2 nov) |
-| Plataforma web en AWS (`http://3.140.124.203`) | En línea, sin HTTPS | Abierta desde el navegador (4 nov) |
-| Dominio `wispr.training` | Apunta a la EC2, pero a veces cae en GoDaddy | DNS revisado el 7 nov: quedan dos registros «Parked» (ver «Qué falta») |
+| Plataforma web en AWS (`https://wispr.training`) | En línea con HTTPS | `http` → 301 a `https`, `https` → 200, CORS correcto (7 nov) |
+| Dominio `wispr.training` y `www` | Apunta solo a la EC2 | DNS revisado en Google, Cloudflare y GoDaddy (7 nov) |
 | Terminal por el dominio | Node ya acepta `wispr.training` y `www` | Comprobado desde fuera el 7 nov; falta una sesión completa |
+| Ícono propio en la pestaña y en Electron | Listo en el código, falta en la EC2 | Node local y app de Electron contra el dominio (7 nov) |
 | Laboratorios que se liberan solos | Listo en el código, falta en la EC2 | Docker simulado, 22 comprobaciones (7 nov) |
 
 El botón traduce la interfaz: página de inicio, registro, retos, terminal, perfil, paneles, recorrido
@@ -101,6 +102,14 @@ npm start
 
 Para usar el navegador, omitir la terminal 3 y abrir <http://127.0.0.1:8787>.
 
+Para abrir la app de escritorio contra el servidor real, no hacen falta las terminales 1 y 2:
+
+```powershell
+cd "C:\Users\Jathniel Navarrete\WISPR\electron"
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+$env:WISPR_URL = "https://wispr.training"; npm start
+```
+
 Las rutas son las de esta PC; en otra computadora hay que cambiarlas. Las terminales deben quedar
 abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
 
@@ -108,15 +117,13 @@ abiertas mientras se usa la app. `Ctrl + C` detiene cada servicio.
 
 ### Imprescindible
 
-1. **Terminar el despliegue en AWS.** La web ya funciona en `http://3.140.124.203` (4 nov), con
-   FastAPI y Node como servicios y las imágenes de Kali construidas. Detalle y pasos en
+1. **Terminar el despliegue en AWS.** La web funciona en `https://wispr.training` (DNS limpio y
+   HTTPS desde el 7 nov), con FastAPI y Node como servicios y las imágenes de Kali construidas. La IP
+   sola (`http://3.140.124.203`) ya no sirve: se entra por el dominio. Detalle y pasos en
    `docs/DESPLIEGUE-AWS.md`. Falta:
-   - **Limpiar el DNS de `wispr.training`.** Tiene tres registros A: el de la EC2 y dos de la página
-     de estacionamiento de GoDaddy (`3.33.130.190` y `15.197.148.33`). Cada visita elige uno al azar,
-     así que unas 2 de cada 3 caen en GoDaddy. Hay que borrar los «Parked» en GoDaddy.
-   - Activar HTTPS con `certbot`, solo cuando el DNS ya esté limpio.
-   - Traer a la EC2 el cambio de los laboratorios (`git pull` en `WISPR-frontend` y reiniciar
-     `wispr-web`) y probar una sesión completa de la terminal.
+   - Traer a la EC2 los laboratorios que se liberan solos y el ícono de la pestaña (`git pull` en
+     `WISPR-frontend` y reiniciar `wispr-web`) y probar una sesión completa de la terminal.
+   - Confirmar que el certificado se renueva solo: `sudo certbot renew --dry-run`.
    - Emitir un voucher nuevo para `admin_wispr`, porque el actual quedó escrito en un chat.
 2. **Preparar la EC2 para el día de EXPOTEC.** Cada laboratorio Kali puede usar hasta ~0,9 GB de
    RAM. En la t3.medium (4 GB) caben 3; con la demo más los jueces conviene pasar a **t3.large**

@@ -776,15 +776,15 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
     GoDaddy. Causa, comprobada pidiendo la página a cada IP: **tres registros A**, el de la EC2
     (`3.140.124.203`) y dos de estacionamiento de GoDaddy (`3.33.130.190`, `15.197.148.33`); cada
     visita elige uno al azar. No era la propagación. Arreglo: borrar en GoDaddy los A «Parked» y dejar
-    solo `A @ → 3.140.124.203` (el `CNAME www → @` está bien). **Pendiente al 7 nov:** el DNS todavía
-    devuelve los tres. `certbot` solo con el DNS limpio.
+    solo `A @ → 3.140.124.203` (el `CNAME www → @` está bien). **Hecho el 7 nov:** Google, Cloudflare
+    y los servidores de GoDaddy responden solo `3.140.124.203`.
   - **La terminal no abría por el dominio:** Node rechaza con 403 toda petición cuyo `Origin` no esté
     en `WISPR_PUBLIC_HOSTS`, y en la EC2 solo estaba la IP. La página y el login cargaban (la página
     no manda `Origin`; el login lo atiende FastAPI), pero `/ws/terminal` y `/api/kali/*` no. Arreglo:
     `WISPR_PUBLIC_HOSTS=3.140.124.203,wispr.training,www.wispr.training` y el dominio en `server_name`.
     **Hecho en Node:** comprobado desde fuera el 7 nov (`Origin: http://wispr.training` → 200).
-    `server_name` sin confirmar (mientras `wispr.conf` sea el único sitio no cambia nada, pero
-    `certbot` lo necesita).
+    `server_name` tenía el texto de ejemplo `tudominio.com www.tudominio.com 3.140.124.203`; se
+    cambió a `wispr.training` el 7 nov (ver el bullet de HTTPS).
   - **«Límite de 3 laboratorios activos»:** la EC2 usa `MAX_LAB_ENVIRONMENTS=3`. Un laboratorio solo
     liberaba su espacio con «Detener entorno» (cerrar la pestaña no), y el contador vivía en memoria
     de Node. Ahora (`WISPR-frontend` `b128621`): se detiene solo tras `LAB_IDLE_MINUTES` (10) sin que
@@ -798,6 +798,29 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
     el volumen y la Elastic IP se conservan). El límite solo afecta la terminal, no entrar a la página.
   - **SSH desde otra red:** el Security Group solo deja entrar por el 22 desde las IPs agregadas; si
     `ssh` da `Connection timed out`, agregar una regla SSH con origen «My IP».
+* **HTTPS en `https://wispr.training` (7 nov).** Certificado de Let's Encrypt con `certbot --nginx`
+  para `wispr.training` y `www`. Antes hubo que corregir `server_name` en
+  `/etc/nginx/conf.d/wispr.conf`: tenía `tudominio.com` y `certbot` no habría encontrado el sitio.
+  `CORS_ORIGINS=https://wispr.training,https://www.wispr.training` en `backend/.env`. Comprobado
+  desde fuera: `http://` → 301 a `https://` (también `www`), `https://` → 200, Node responde y el
+  CORS acepta el dominio. Consecuencias:
+  - **La IP sola ya no sirve:** `http://3.140.124.203` da 404 (el certificado es del dominio). Todos
+    entran por `https://wispr.training`, también Electron (`WISPR_URL`).
+  - La terminal no cambia: el frontend pasa solo de `ws://` a `wss://` (`app.js`) y Node compara
+    solo el nombre del dominio en `WISPR_PUBLIC_HOSTS`.
+  - **HSTS queda apagado a propósito hasta después de EXPOTEC.** Le dice al navegador «solo HTTPS
+    por un año» y no se puede deshacer: si HTTPS fallara cerca de la expo, esos navegadores no
+    podrían entrar ni por `http`. La redirección 301 ya cubre la demo.
+  - En la PC Windows del dueño, Norton re-firma el HTTPS: ahí el emisor aparece como «Norton Web/Mail
+    Shield». No es un problema del servidor.
+* **Ícono propio en la pestaña y en Electron (7 nov).** La cabeza del alien de `img/logo.png`
+  (sin el texto, que no se lee a 16 px), recortada en cuadrado. Web: `WISPR-frontend/img/favicon-32.png`
+  y `favicon-192.png`, enlazados en `index.html` y agregados a la lista de `publicStaticPath()` de
+  `server.js` (Node solo sirve lo que está en esa lista: **hay que reiniciar Node**). Electron:
+  `electron/assets/icon.ico` (16-256 px, Windows) e `icon.png` (Linux/Mac) en el `icon` de la
+  ventana. Probado: Node temporal sirve los dos PNG; la app de Electron contra `https://wispr.training`
+  muestra el alien en la barra de tareas. Límite: anclar `npm start` a la barra fija `electron.exe`
+  (ícono de Electron); eso solo lo arregla un instalador.
 * **Voucher para cuentas admin (2 nov).** Antes un admin entraba solo con contraseña, sin código
   por correo. Ahora: contraseña → `voucherRequired` → `POST /api/players/login-voucher`; no hay
   sesión hasta acertar el voucher. Propio de cada admin, de unos 100 bits, guardado con bcrypt en
@@ -853,11 +876,13 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
 **EXPOTEC es el 12 de noviembre de 2026.** Estado vigente: `docs/ESTADO-PROYECTO.md`. EC2, dominio y
 mantenimiento: `docs/DESPLIEGUE-AWS.md`. Lo que falta para EXPOTEC, en orden:
 
-1. **DNS:** borrar en GoDaddy los registros A «Parked» de `wispr.training` y comprobar que solo
-   responda `3.140.124.203` (ver "Dominio `wispr.training`…" en "Progreso técnico").
-2. **HTTPS** con `certbot` para `wispr.training` y `www.wispr.training`, solo con el DNS limpio.
-3. **Laboratorios en la EC2:** `cd ~/WISPR-frontend && git pull && sudo systemctl restart wispr-web`
-   y probar una sesión completa de la terminal con Docker real.
+1. ~~DNS: borrar los registros A «Parked» de `wispr.training`~~ ✅ Hecho (7 nov).
+2. ~~HTTPS con `certbot`~~ ✅ Hecho (7 nov): `https://wispr.training`. HSTS apagado a propósito.
+   No se pudo comprobar desde fuera que la renovación funcione: correr `sudo certbot renew --dry-run`
+   en la EC2 si no se hizo.
+3. **Laboratorios e ícono en la EC2:** `cd ~/WISPR-frontend && git pull && sudo systemctl restart
+   wispr-web` (trae los laboratorios que se liberan solos y el ícono de la pestaña) y probar una
+   sesión completa de la terminal con Docker real.
 4. **El día de EXPOTEC:** t3.large + `MAX_LAB_ENVIRONMENTS=6`; volver a t3.medium después.
 5. **Voucher nuevo para `admin_wispr`** (el actual quedó escrito en un chat). Lo emite el dueño.
 6. **Ensayo completo de la demo** por el dominio: registro → retos → terminal (`ctf hint`,

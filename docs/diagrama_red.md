@@ -2,8 +2,8 @@
 
 Describe la red que corresponde al código actual (31 oct 2026, revisado el 7 nov):
 `deploy/nginx/wispr.conf`, `WISPR-frontend/server.js` y el backend FastAPI. Desde el 4 nov la
-instancia está desplegada así en `3.140.124.203` / `wispr.training`, salvo HTTPS (ver
-`docs/DESPLIEGUE-AWS.md`).
+instancia está desplegada así en `https://wispr.training` (`3.140.124.203`); HTTPS desde el 7 nov
+(ver `docs/DESPLIEGUE-AWS.md`).
 
 Si no coincide con `arquitectura_mvp.md`, vale este. Las diferencias están en
 [la última sección](#diferencias-con-arquitectura_mvpmd).
@@ -100,7 +100,7 @@ flowchart TB
 | Origen | Destino | Protocolo y puerto | Para qué |
 |---|---|---|---|
 | Usuario | nginx | HTTPS/WSS 443 | Página, API y terminal |
-| Usuario | nginx | HTTP 80 | Redirección a HTTPS (se activa al configurar `certbot`) |
+| Usuario | nginx | HTTP 80 | Redirección a HTTPS (activa desde el 7 nov) |
 | Administrador | EC2 | SSH 22 | Administración, solo desde su IP |
 | nginx | FastAPI | HTTP local 8000 | API |
 | nginx | Node | HTTP/WebSocket local 8787 | Frontend y terminal |
@@ -149,7 +149,6 @@ flowchart TB
 
 ## Pendiente para que la red quede así
 
-- **HTTPS:** `wispr.conf` solo escucha en el puerto 80. El 443 se agrega con `certbot`.
-- **Dominio:** `wispr.training` y `www` ya están en `WISPR_PUBLIC_HOSTS` de Node (comprobado el
-  7 nov); confirmar que también estén en `server_name` de nginx, porque `certbot` lo necesita. Falta
-  borrar en GoDaddy los registros A «Parked», que mandan parte de las visitas a su página.
+Nada: desde el 7 nov la instancia coincide con este diagrama. `wispr.conf` escucha en 80 y 443
+(bloque agregado por `certbot`), el DNS de `wispr.training` apunta solo a la EC2 y `server_name` y
+`WISPR_PUBLIC_HOSTS` tienen el dominio. HSTS queda apagado hasta después de EXPOTEC.

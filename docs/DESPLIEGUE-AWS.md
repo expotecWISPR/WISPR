@@ -1,29 +1,29 @@
 # WISPR — Despliegue en AWS
 
 Registro del despliegue real del 4 de noviembre de 2026, actualizado el 7 de noviembre con el
-dominio y los laboratorios: qué se instaló en la EC2, cómo quedó configurado y qué falló por el
+dominio, HTTPS y los laboratorios: qué se instaló en la EC2, cómo quedó configurado y qué falló por el
 camino. Sirve para repetirlo en otra instancia o para entender la actual.
 
 ## Estado
 
 | Parte | Estado |
 |---|---|
-| Plataforma web en `http://3.140.124.203` | Funciona (registro, login y retos) |
+| Plataforma web en `https://wispr.training` | Funciona (registro, login y retos) |
 | FastAPI y Node como servicios | Funcionan; arrancan solos al encender la EC2 |
 | Imágenes de Kali (`wispr-ctf-kali`, `wispr-ctf-target`) | Construidas |
-| Terminal Kali desde la web | Arranca laboratorios por la IP; falta una sesión completa |
+| Terminal Kali desde la web | Arranca laboratorios; falta una sesión completa por el dominio |
 | Dominio `wispr.training` en Node | Hecho: Node lo acepta (comprobado desde fuera el 7 nov) |
-| Dominio en `server_name` de nginx | Sin confirmar: `grep server_name /etc/nginx/conf.d/wispr.conf` (paso 6) |
-| DNS de `wispr.training` | Pendiente: sobran dos registros «Parked» de GoDaddy (ver [Dominio](#dominio-wisprtraining)) |
-| Laboratorios que se liberan solos | En GitHub (`WISPR-frontend` `b128621`); falta `git pull` en la EC2 |
-| HTTPS | Pendiente (con el DNS ya limpio) |
-| Electron apuntando al servidor | Pendiente |
+| Dominio en `server_name` de nginx | Hecho (7 nov): tenía `tudominio.com` de ejemplo (ver [Problemas](#problemas-que-aparecieron)) |
+| DNS de `wispr.training` | Hecho (7 nov): solo responde `3.140.124.203` |
+| HTTPS | Hecho (7 nov): Let's Encrypt con `certbot`, `http` redirige a `https`. HSTS apagado (ver [HTTPS](#https)) |
+| Laboratorios que se liberan solos e ícono de la pestaña | En GitHub; falta `git pull` en la EC2 |
+| Electron apuntando al servidor | Funciona con `WISPR_URL=https://wispr.training` (probado el 7 nov) |
 
 ## Cómo quedó
 
 ```
-Navegador ── http :80 ──► nginx ──┬─► FastAPI  127.0.0.1:8000  (servicio wispr-api)
-                                  └─► Node     127.0.0.1:8787  (servicio wispr-web) ──► Docker (Kali)
+Navegador ── https :443 ─► nginx ──┬─► FastAPI  127.0.0.1:8000  (servicio wispr-api)
+                                   └─► Node     127.0.0.1:8787  (servicio wispr-web) ──► Docker (Kali)
 FastAPI ──► Supabase (la misma base que en desarrollo), Together AI, Gmail SMTP
 ```
 
@@ -202,6 +202,20 @@ grep server_name /etc/nginx/conf.d/wispr.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+En la EC2 actual, `server_name` resultó tener el texto de ejemplo `tudominio.com www.tudominio.com
+3.140.124.203;` (copiado de una guía). Se corrigió el 7 nov, con respaldo antes:
+
+```bash
+sudo cp /etc/nginx/conf.d/wispr.conf ~/wispr.conf.respaldo
+sudo sed -i '/server_name/s/tudominio\.com/wispr.training/g' /etc/nginx/conf.d/wispr.conf
+grep server_name /etc/nginx/conf.d/wispr.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Siempre revisar con `grep server_name` antes de `certbot`: con un solo sitio, nginx atiende cualquier
+nombre y la página funciona igual, así que un `server_name` equivocado no se nota hasta que
+`certbot` no encuentra el sitio.
+
 ### 7. Imágenes de Kali
 
 Tardan unos 25 minutos. Con `nohup` siguen aunque se corte el SSH:
@@ -246,6 +260,9 @@ en `WISPR_PUBLIC_HOSTS` (paso 4), o Node no se reinició después de cambiarla.
 | Por el dominio carga la página, pero la terminal no abre | Node rechaza con 403 el `Origin` que no está en `WISPR_PUBLIC_HOSTS`, y solo estaba la IP | Agregar el dominio y `www` (paso 4) y reiniciar `wispr-web` |
 | «Límite de 3 laboratorios activos» al abrir la terminal | Un laboratorio solo liberaba su espacio con «Detener entorno», y el contador vivía en memoria | Desde `b128621` se liberan solos tras 10 minutos sin uso. Limpieza manual en [Laboratorios](#laboratorios-kali) |
 | `ssh` termina en `Connection timed out` | El Security Group solo deja entrar por el 22 desde las IPs agregadas | Agregar una regla SSH con origen «My IP» (paso 1) |
+| `Identity file ... not accessible` al hacer `ssh` desde Windows | La ruta `Descargas\...`: la carpeta se llama `Downloads` aunque el Explorador muestre «Descargas» | Ruta completa; mejor mover la llave a `%USERPROFILE%\.ssh` y dejarla solo para el usuario (paso 1) |
+| `server_name` con `tudominio.com` | Texto de ejemplo de una guía que nadie cambió; la página funcionaba igual porque nginx tiene un solo sitio | Cambiarlo a `wispr.training` antes de `certbot` (paso 6) |
+| `http://3.140.124.203` da 404 | Normal desde HTTPS: el certificado es del dominio, y el bloque del puerto 80 de `certbot` solo redirige el dominio | Entrar por `https://wispr.training` |
 
 ## Dominio `wispr.training`
 
@@ -257,13 +274,42 @@ En GoDaddy, **Mis productos → wispr.training → DNS → Registros**, deben qu
 | CNAME | `www` | `@` |
 
 - GoDaddy crea un registro A «Parked» que lleva a su página de estacionamiento. Si queda junto al de
-  la EC2, el navegador elige uno al azar en cada visita. Revisado el 7 nov: todavía responden
-  `3.33.130.190` y `15.197.148.33` (GoDaddy) además de la EC2.
+  la EC2, el navegador elige uno al azar en cada visita. Pasó aquí (`3.33.130.190` y
+  `15.197.148.33`); se borraron el 7 nov y desde entonces Google, Cloudflare y GoDaddy responden solo
+  `3.140.124.203`.
 - En **Reenvío (Forwarding)** no debe haber nada activo.
 - Los registros duran 10 minutos en caché, así que el cambio se ve en unos 10 minutos.
 - **Comprobar:** `dig +short wispr.training` en Linux, o `nslookup wispr.training` en Windows, debe
   responder solo `3.140.124.203`.
 - `certbot` necesita el DNS limpio: si Let's Encrypt cae en una IP de GoDaddy, la validación falla.
+
+## HTTPS
+
+Activado el 7 nov, con el DNS ya limpio y `server_name` corregido (paso 6):
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d wispr.training -d www.wispr.training
+sed -i 's#^CORS_ORIGINS=.*#CORS_ORIGINS=https://wispr.training,https://www.wispr.training#' ~/WISPR/backend/.env
+sudo systemctl restart wispr-api
+sudo certbot renew --dry-run
+```
+
+- `certbot` pide un certificado gratis a Let's Encrypt, agrega a `wispr.conf` el bloque del 443 y
+  cambia el del 80 para que redirija a `https`. A `certbot` se le da un correo del proyecto (avisos de
+  vencimiento) y se acepta la redirección.
+- El certificado dura 90 días y se renueva solo con un temporizador de systemd mientras la EC2 está
+  encendida. `renew --dry-run` prueba la renovación sin cambiar nada.
+- `WISPR_PUBLIC_HOSTS` no cambia: Node compara solo el nombre, no `http`/`https`. La terminal pasa
+  sola a `wss://`.
+- **Comprobado desde fuera el 7 nov:** `http://` → 301 a `https://` (también `www`), `https://` → 200,
+  Node responde y una petición CORS desde `https://wispr.training` se acepta.
+- **HSTS queda apagado hasta después de EXPOTEC.** Le ordena al navegador usar solo HTTPS durante un
+  año y no se puede deshacer en los navegadores que ya lo vieron: si HTTPS fallara cerca de la expo,
+  no podrían entrar ni por `http`. La redirección ya cubre la demo. Para activarlo después, descomentar
+  la línea `Strict-Transport-Security` **en el bloque del 443** de `wispr.conf` y recargar nginx.
+- En una PC con Norton (o un antivirus que inspeccione HTTPS), el emisor del certificado aparece como
+  el antivirus y no como Let's Encrypt. Es el antivirus, no el servidor.
 
 ## Mantenimiento
 
@@ -341,17 +387,12 @@ Cuesta aproximadamente US$1 más por día. Al terminar, se hace lo mismo con `t3
 
 ## Pendiente
 
-1. **Limpiar el DNS** de `wispr.training` (ver [Dominio](#dominio-wisprtraining)).
-2. **Traer el cambio de los laboratorios:** `cd ~/WISPR-frontend && git pull && sudo systemctl
-   restart wispr-web` (no hace falta `npm ci`). Luego probar una sesión completa: abrir un reto,
-   pulsar «Abrir en Kali», usar `ctf show` y `ctf submit`.
-3. **HTTPS**, con el DNS ya limpio:
-   ```bash
-   sudo apt install -y certbot python3-certbot-nginx
-   sudo certbot --nginx -d wispr.training -d www.wispr.training
-   ```
-   `WISPR_PUBLIC_HOSTS` no cambia: Node compara solo el nombre, no `http`/`https`. Poner
-   `CORS_ORIGINS=https://wispr.training,https://www.wispr.training` en `backend/.env`, reiniciar
-   `wispr-api` y activar la línea de HSTS en `wispr.conf`.
-4. **Electron:** fijar la dirección del servidor dentro de la app antes de construir el instalador.
+1. **Traer los laboratorios que se liberan solos y el ícono de la pestaña:** `cd ~/WISPR-frontend &&
+   git pull && sudo systemctl restart wispr-web` (no hace falta `npm ci`). Luego probar una sesión
+   completa por `https://wispr.training`: abrir un reto, pulsar «Abrir en Kali», usar `ctf show` y
+   `ctf submit`.
+2. **Confirmar la renovación del certificado** si no se hizo: `sudo certbot renew --dry-run`.
+3. **Electron:** fijar la dirección del servidor dentro de la app antes de construir el instalador
+   (hoy se pasa con `WISPR_URL=https://wispr.training`).
+4. **HSTS**, después de EXPOTEC (ver [HTTPS](#https)).
 5. **Separar la base de producción** de la de desarrollo si se va a usar con estudiantes reales.

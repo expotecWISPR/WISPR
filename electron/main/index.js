@@ -7,7 +7,7 @@
  * web y escritorio se comportan igual y no hay que mantener dos versiones.
  *
  * Dirección del servidor: variable de entorno WISPR_URL (por ejemplo
- * https://wispr.ejemplo.com). Sin ella, el servidor local de desarrollo.
+ * https://wispr.training). Sin ella, el servidor local de desarrollo.
  */
 
 const path = require("node:path");
@@ -27,6 +27,9 @@ function appUrl() {
 
 const APP_URL = appUrl();
 const OFFLINE_PAGE = path.join(__dirname, "offline.html");
+// Ícono de la ventana y de la barra de tareas: la cabeza del alien del logo.
+// Windows usa el .ico (trae de 16 a 256 px, nítido en barra y Alt+Tab).
+const APP_ICON = path.join(__dirname, "..", "assets", process.platform === "win32" ? "icon.ico" : "icon.png");
 
 function isAppUrl(target) {
   try { return new URL(target).origin === APP_URL.origin; } catch { return false; }
@@ -52,6 +55,7 @@ function createWindow() {
     minWidth: 400,
     minHeight: 600,
     title: "WISPR",
+    icon: APP_ICON,
     backgroundColor: "#081a3a",
     show: false,
     autoHideMenuBar: true,
