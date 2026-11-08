@@ -6,16 +6,21 @@
  * lógica propia: retos, terminal Kali y progreso viven en el servidor, así que
  * web y escritorio se comportan igual y no hay que mantener dos versiones.
  *
- * Dirección del servidor: variable de entorno WISPR_URL (por ejemplo
- * https://wispr.training). Sin ella, el servidor local de desarrollo.
+ * Dirección del servidor:
+ * - App instalada (el .exe): siempre https://wispr.training. No lee WISPR_URL,
+ *   para que nada en la computadora pueda apuntarla a otro sitio.
+ * - Desarrollo (npm start): WISPR_URL si está definida; si no, el servidor
+ *   local http://127.0.0.1:8787.
  */
 
 const path = require("node:path");
 const { app, BrowserWindow, session, shell } = require("electron");
 
-const DEFAULT_URL = "http://127.0.0.1:8787";
+const PRODUCTION_URL = "https://wispr.training";
+const DEFAULT_URL = app.isPackaged ? PRODUCTION_URL : "http://127.0.0.1:8787";
 
 function appUrl() {
+  if (app.isPackaged) return new URL(PRODUCTION_URL);
   const raw = (process.env.WISPR_URL || DEFAULT_URL).trim();
   try {
     const url = new URL(raw);

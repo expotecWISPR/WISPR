@@ -1,13 +1,49 @@
 {
   "name": "wispr-desktop",
+  "productName": "WISPR",
   "version": "1.0.0",
   "private": true,
   "description": "WISPR — aplicación de escritorio (cliente Electron de la plataforma)",
+  "author": "Equipo WISPR — CTP Don Bosco",
   "main": "main/index.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
   },
   "devDependencies": {
-    "electron": "44.7.0"
+    "electron": "44.7.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "training.wispr.desktop",
+    "productName": "WISPR",
+    "copyright": "© 2026 WISPR — CTP Don Bosco",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**",
+      "preload/**",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "artifactName": "WISPR-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WISPR",
+      "uninstallDisplayName": "WISPR",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerLanguages": ["es_ES"],
+      "language": "3082"
+    }
   }
 }

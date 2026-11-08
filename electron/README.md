@@ -29,6 +29,25 @@ WISPR_URL=https://wispr.training npm start
 Si el servidor no responde, la app muestra «No se pudo conectar con WISPR» con un botón
 «Reintentar».
 
+## Instalador para Windows
+
+```bash
+npm run dist         # genera dist/WISPR-Setup.exe (~115 MB)
+```
+
+- La app instalada abre siempre `https://wispr.training` e ignora `WISPR_URL` (solo `npm start`
+  la usa). La página se carga del servidor: un cambio en la web **no** obliga a recompilar.
+  Solo hace falta un instalador nuevo si cambia algo de esta carpeta.
+- Se publica en GitHub Releases del repo `WISPR`. La página de descarga de la web
+  (`wispr.training/#descargar`) enlaza a `releases/latest/download/WISPR-Setup.exe`, así que
+  basta con publicar un release nuevo con el archivo del mismo nombre:
+  `gh release create vX.Y.Z dist/WISPR-Setup.exe` (subir antes `version` en `package.json`, y la
+  versión que muestra `DESKTOP_DOWNLOAD` en `WISPR-frontend/app.js`).
+- Sin firma digital: Windows muestra «Windows protegió su PC» la primera vez («Más información →
+  Ejecutar de todas formas»). Firmarlo requiere un certificado de pago.
+- Se instala por usuario (sin permisos de administrador), con acceso directo en el escritorio y en
+  el menú Inicio, y se desinstala desde Configuración → Aplicaciones.
+
 ## Seguridad
 
 - La página no tiene acceso a Node ni al sistema (`contextIsolation`, `sandbox`, sin
@@ -43,5 +62,3 @@ Si el servidor no responde, la app muestra «No se pudo conectar con WISPR» con
   versión `v24.x`): la variable de entorno `ELECTRON_RUN_AS_NODE` está definida. Pasa al lanzarla
   desde algunas extensiones de VS Code. Ábrela desde una terminal normal o quita la variable:
   `Remove-Item Env:ELECTRON_RUN_AS_NODE` (PowerShell).
-- Todavía no hay instalador (`.exe`): para la demo basta `npm start`. Si hace falta, se puede
-  empaquetar después con `electron-builder`.
