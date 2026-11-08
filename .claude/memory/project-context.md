@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-WISPR es una plataforma CTF educativa (CTP Don Bosco, EXPOTEC octubre 2026). El detalle completo
+WISPR es una plataforma CTF educativa (CTP Don Bosco, EXPOTEC 12 de noviembre de 2026). El detalle completo
 de tecnologías, arquitectura y progreso vive en `CLAUDE.md` (raíz del repo), sección
 "Estado actual del proyecto" — se actualiza al final de cada sesión de trabajo.
 

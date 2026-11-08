@@ -247,8 +247,8 @@ Se evaluaron y se decidió no usarlas. No reintroducir sin una justificación t�
 Esta sección se actualiza al final de cada sesión de trabajo para retomar el contexto completo
 desde cualquier dispositivo, ya que este archivo viaja con el repositorio Git.
 
-**Última actualización:** 4 de noviembre de 2026. Resumen vigente de estado, tecnologías reales,
-comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
+**Última actualización:** 7 de noviembre de 2026. Resumen vigente de estado, tecnologías reales,
+comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembre de 2026.**
 
 ## Decisiones de arquitectura tomadas
 
@@ -770,6 +770,34 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
   `.env` van con relleno (S3 no está integrado). Pasos, problemas y mantenimiento en
   `docs/DESPLIEGUE-AWS.md`. Falta: probar la terminal Kali desde la web, HTTPS con dominio, Electron
   apuntando al servidor y un voucher nuevo para `admin_wispr` (el actual quedó escrito en un chat).
+* **Dominio `wispr.training`, terminal por el dominio y laboratorios que se liberan solos (5-7 nov).**
+  Detalle y comandos en `docs/DESPLIEGUE-AWS.md`.
+  - **Dominio:** comprado en GoDaddy (DNS en `domaincontrol.com`). A veces mostraba la página de
+    GoDaddy. Causa, comprobada pidiendo la página a cada IP: **tres registros A**, el de la EC2
+    (`3.140.124.203`) y dos de estacionamiento de GoDaddy (`3.33.130.190`, `15.197.148.33`); cada
+    visita elige uno al azar. No era la propagación. Arreglo: borrar en GoDaddy los A «Parked» y dejar
+    solo `A @ → 3.140.124.203` (el `CNAME www → @` está bien). **Pendiente al 7 nov:** el DNS todavía
+    devuelve los tres. `certbot` solo con el DNS limpio.
+  - **La terminal no abría por el dominio:** Node rechaza con 403 toda petición cuyo `Origin` no esté
+    en `WISPR_PUBLIC_HOSTS`, y en la EC2 solo estaba la IP. La página y el login cargaban (la página
+    no manda `Origin`; el login lo atiende FastAPI), pero `/ws/terminal` y `/api/kali/*` no. Arreglo:
+    `WISPR_PUBLIC_HOSTS=3.140.124.203,wispr.training,www.wispr.training` y el dominio en `server_name`.
+    **Hecho en Node:** comprobado desde fuera el 7 nov (`Origin: http://wispr.training` → 200).
+    `server_name` sin confirmar (mientras `wispr.conf` sea el único sitio no cambia nada, pero
+    `certbot` lo necesita).
+  - **«Límite de 3 laboratorios activos»:** la EC2 usa `MAX_LAB_ENVIRONMENTS=3`. Un laboratorio solo
+    liberaba su espacio con «Detener entorno» (cerrar la pestaña no), y el contador vivía en memoria
+    de Node. Ahora (`WISPR-frontend` `b128621`): se detiene solo tras `LAB_IDLE_MINUTES` (10) sin que
+    nadie escriba en su terminal, abierta o cerrada (si está abierta se cierra con aviso, código
+    4408), y el límite cuenta los contenedores que corren en Docker, así que sobrevive a reinicios.
+    Probado con un docker simulado (22 comprobaciones; el código anterior falla la misma prueba).
+    **Falta:** `git pull` en la EC2 y probarlo con Docker real.
+  - **Capacidad:** cada laboratorio puede usar hasta ~0,9 GB de RAM (Kali 768 MB + objetivo 128 MB).
+    En la t3.medium (4 GB, sin swap) caben 3 en el peor caso; 5 no. Los 30 GiB del volumen son disco,
+    no RAM. **Para EXPOTEC:** t3.large (8 GB) ese día y `MAX_LAB_ENVIRONMENTS=6` (≈ US$1 más por día;
+    el volumen y la Elastic IP se conservan). El límite solo afecta la terminal, no entrar a la página.
+  - **SSH desde otra red:** el Security Group solo deja entrar por el 22 desde las IPs agregadas; si
+    `ssh` da `Connection timed out`, agregar una regla SSH con origen «My IP».
 * **Voucher para cuentas admin (2 nov).** Antes un admin entraba solo con contraseña, sin código
   por correo. Ahora: contraseña → `voucherRequired` → `POST /api/players/login-voucher`; no hay
   sesión hasta acertar el voucher. Propio de cada admin, de unos 100 bits, guardado con bcrypt en
@@ -820,13 +848,32 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`.
   **Session Pooler** (`aws-0-ca-central-1.pooler.supabase.com:5432`, usuario `postgres.<ref>`).
   Para distinguirlo: `nslookup db.<ref>.supabase.co` responde solo una IP `2600:…` → es esto.
 
-## ▶ RETOMAR AQUÍ (cierre de la sesión del 22 oct)
+## ▶ RETOMAR AQUÍ (cierre de la sesión del 7 nov)
+
+**EXPOTEC es el 12 de noviembre de 2026.** Estado vigente: `docs/ESTADO-PROYECTO.md`. EC2, dominio y
+mantenimiento: `docs/DESPLIEGUE-AWS.md`. Lo que falta para EXPOTEC, en orden:
+
+1. **DNS:** borrar en GoDaddy los registros A «Parked» de `wispr.training` y comprobar que solo
+   responda `3.140.124.203` (ver "Dominio `wispr.training`…" en "Progreso técnico").
+2. **HTTPS** con `certbot` para `wispr.training` y `www.wispr.training`, solo con el DNS limpio.
+3. **Laboratorios en la EC2:** `cd ~/WISPR-frontend && git pull && sudo systemctl restart wispr-web`
+   y probar una sesión completa de la terminal con Docker real.
+4. **El día de EXPOTEC:** t3.large + `MAX_LAB_ENVIRONMENTS=6`; volver a t3.medium después.
+5. **Voucher nuevo para `admin_wispr`** (el actual quedó escrito en un chat). Lo emite el dueño.
+6. **Ensayo completo de la demo** por el dominio: registro → retos → terminal (`ctf hint`,
+   `ctf submit`) → profesor → admin → teoría.
+
+**Push desde la PC Arch:** ahí VS Code corre como Flatpak y su terminal no ve `gh`, que es con lo que
+Git se autentica con GitHub. Un `git push` desde la terminal de VS Code falla: hay que hacerlo desde
+una terminal normal del sistema.
+
+Lo que sigue es el orden acordado el 22 oct, como registro.
 
 **Resumen del 22 oct (flujo completo y cómo funciona cada cosa): `docs/SESION-22-OCT.md`.** Todo
 lo del 22 oct quedó con push en `main` de los dos repos.
 
 Todo lo del 20 oct quedó con **push en `main`** de los dos repos (`WISPR` y `WISPR-frontend`).
-EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
+Orden acordado el 22 oct:
 
 1. ~~App de escritorio con Electron~~ ✅ **Hecho (22 oct)** — `electron/` (Electron 44.7.0, ver
    `electron/README.md`). Ventana segura que abre la URL del servidor (`WISPR_URL`, por defecto
@@ -839,15 +886,8 @@ EXPOTEC es a finales de octubre: quedan ~10 días. Orden acordado para seguir:
    instalador `.exe` (`electron-builder`). Ojo: en el entorno de
    Claude Code dentro de VS Code está definida `ELECTRON_RUN_AS_NODE=1` → hay que quitarla para
    lanzar Electron desde ahí.
-2. **Despliegue en AWS (Persona 2)** — avisarle: (a) probablemente la EC2 tampoco tiene IPv6 →
-   usar el Session Pooler de Supabase (ver "Conexión a Supabase por IPv4"); (b) `alembic upgrade
-   head` (hay 6 migraciones nuevas: `8f1d3c6a2b47`, `b3e9a7d41c20`, `d7a4f19c3e58`, `e2b8c6d05a71`,
-   `f4c1a8e93b26`, `a7d2e5c18f90`) y
-   `python -m app.db.seed_challenges` (14 retos); (c) construir la imagen de Kali
-   **desde cero** (ver 7d); (d) arrancar Node desde una consola real o como servicio (en Windows,
-   Node sin consola se cae con `AttachConsole failed` al cerrar una terminal — no afecta a Linux).
-3. **Ensayo completo de la demo** en la máquina final: registro → retos → terminal (`ctf hint`,
-   `ctf submit`) → profesor (grupos, tareas) → admin (cuentas, bloqueo, reset) → teoría.
+2. ~~Despliegue en AWS (Persona 2)~~ ✅ Hecho (4 nov) — ver `docs/DESPLIEGUE-AWS.md`.
+3. **Ensayo completo de la demo** — sigue pendiente (punto 6 de la lista de arriba).
 4. **Alinear lo que dice este archivo con lo que hay de verdad** (para la defensa, que no pregunten
    algo que no existe):
    | Dice el proyecto | Realidad (20 oct) |
@@ -1055,7 +1095,7 @@ La mejor solución no es la más compleja ni la más innovadora, sino la que pue
 
 # Prioridad del proyecto
 
-La prioridad absoluta es construir un MVP sólido, funcional y defendible para EXPOTEC (a finales de año, octubre 2026) y durante el año se harán defensas de proyecto con los avances que se tienen
+La prioridad absoluta es construir un MVP sólido, funcional y defendible para EXPOTEC (12 de noviembre de 2026) y durante el año se harán defensas de proyecto con los avances que se tienen
 
 Las funcionalidades avanzadas solo deben implementarse cuando exista una necesidad técnica demostrada y no comprometan la estabilidad del sistema.
 

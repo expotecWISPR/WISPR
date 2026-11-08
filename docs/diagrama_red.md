@@ -1,8 +1,9 @@
 # WISPR — Diagrama de red real
 
-Describe la red que corresponde al código actual (31 oct 2026): `deploy/nginx/wispr.conf`,
-`WISPR-frontend/server.js` y el backend FastAPI. Muestra cómo debe quedar la instancia en AWS.
-Este documento no confirma que el despliegue ya esté hecho.
+Describe la red que corresponde al código actual (31 oct 2026, revisado el 7 nov):
+`deploy/nginx/wispr.conf`, `WISPR-frontend/server.js` y el backend FastAPI. Desde el 4 nov la
+instancia está desplegada así en `3.140.124.203` / `wispr.training`, salvo HTTPS (ver
+`docs/DESPLIEGUE-AWS.md`).
 
 Si no coincide con `arquitectura_mvp.md`, vale este. Las diferencias están en
 [la última sección](#diferencias-con-arquitectura_mvpmd).
@@ -76,7 +77,7 @@ flowchart TB
 | Componente | Dirección | Función |
 |---|---|---|
 | Electron o navegador | Equipo del usuario | Muestra WISPR y abre la terminal con xterm.js |
-| Security Group | Borde de la instancia | Único firewall: 443 y 80 abiertos, 22 solo para la IP del administrador |
+| Security Group | Borde de la instancia | Único firewall: 443 y 80 abiertos, 22 solo para las IPs agregadas por el equipo |
 | nginx | `:80`, `:443` | Único punto de entrada; reparte el tráfico por ruta |
 | FastAPI | `127.0.0.1:8000` | Cuentas, sesiones, retos, flags, ranking, grupos y progreso |
 | Node | `127.0.0.1:8787` | Sirve el frontend y controla la terminal y los contenedores |
@@ -120,8 +121,12 @@ flowchart TB
 
 | Contenedor | Memoria | CPU | Procesos |
 |---|---|---|---|
-| Kali | 2 GB por defecto; 768 MB en la EC2 (`KALI_MEMORY`) | 2 (`KALI_CPUS`) | 256 |
+| Kali | 2 GB por defecto; 768 MB en la EC2 (`KALI_MEMORY`) | 2 por defecto; 1 en la EC2 (`KALI_CPUS`) | 256 |
 | Objetivo | 128 MB | 0.5 | 64 |
+
+- Como máximo `MAX_LAB_ENVIRONMENTS` laboratorios encendidos a la vez (3 en la t3.medium). Se cuentan
+  los contenedores que corren en Docker.
+- Un laboratorio se detiene solo tras `LAB_IDLE_MINUTES` (10) sin que nadie escriba en su terminal.
 
 ## Seguridad de la sesión
 
@@ -144,5 +149,7 @@ flowchart TB
 
 ## Pendiente para que la red quede así
 
-- **HTTPS:** `wispr.conf` solo escucha en el puerto 80. El 443 se agrega con `certbot` al desplegar.
-- **Dominio:** cambiar `server_name` y poner la misma dirección en `WISPR_PUBLIC_HOSTS` de Node.
+- **HTTPS:** `wispr.conf` solo escucha en el puerto 80. El 443 se agrega con `certbot`.
+- **Dominio:** `wispr.training` y `www` ya están en `WISPR_PUBLIC_HOSTS` de Node (comprobado el
+  7 nov); confirmar que también estén en `server_name` de nginx, porque `certbot` lo necesita. Falta
+  borrar en GoDaddy los registros A «Parked», que mandan parte de las visitas a su página.
