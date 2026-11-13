@@ -908,6 +908,11 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
     base64/base32, tr, openssl, jq, python3 con PIL y scapy, `ctf`. **No funcionan por diseño**
     (sin tarjeta Wi-Fi ni root): airodump-ng, aireplay-ng, mdk4, reaver, bully, arpspoof, captura
     en vivo y `nmap -sS`.
+  - **Revertido `21b9b18`** (`75dd691`, ya en la EC2): el truco que ponía el prompt en una línea
+    nueva tras un `cat` de un binario (línea de espacios antes de cada prompt) alteraba el margen
+    de la terminal. Solo se notó al recrear los laboratorios: Node reutiliza los contenedores, y el
+    que estaba abierto seguía con una imagen anterior a ese commit. Vuelve el problema original:
+    tras `cat` de un binario el prompt puede quedar pegado o con símbolos raros (`reset` lo arregla).
 
 ## ▶ RETOMAR AQUÍ (cierre de la sesión del 7 nov)
 
