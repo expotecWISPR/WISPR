@@ -908,11 +908,12 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
     base64/base32, tr, openssl, jq, python3 con PIL y scapy, `ctf`. **No funcionan por diseño**
     (sin tarjeta Wi-Fi ni root): airodump-ng, aireplay-ng, mdk4, reaver, bully, arpspoof, captura
     en vivo y `nmap -sS`.
-  - **Revertido `21b9b18`** (`75dd691`, ya en la EC2): el truco que ponía el prompt en una línea
-    nueva tras un `cat` de un binario (línea de espacios antes de cada prompt) alteraba el margen
-    de la terminal. Solo se notó al recrear los laboratorios: Node reutiliza los contenedores, y el
-    que estaba abierto seguía con una imagen anterior a ese commit. Vuelve el problema original:
-    tras `cat` de un binario el prompt puede quedar pegado o con símbolos raros (`reset` lo arregla).
+  - **Captura en vivo** (`tshark` sin `-r`, `tcpdump -i`): no se puede por diseño (sin
+    `CAP_NET_RAW`). dumpcap soltaba un mensaje enorme que pedía `sudo` y se salía de la terminal;
+    ahora `wispr.bashrc` muestra un aviso de 4 líneas con el comando `-r` (`9c8062b`, en la EC2).
+    Los avisos de la terminal van en líneas cortas (≤ 64 caracteres) para no salirse del margen.
+  - `21b9b18` (prompt en línea nueva tras `cat` de un binario) se revirtió por error y se
+    restauró el mismo día (`75dd691` → `1d1c977`): no era la causa del margen.
 
 ## ▶ RETOMAR AQUÍ (cierre de la sesión del 7 nov)
 
