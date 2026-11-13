@@ -264,6 +264,10 @@ en `WISPR_PUBLIC_HOSTS` (paso 4), o Node no se reinició después de cambiarla.
 | `Identity file ... not accessible` al hacer `ssh` desde Windows | La ruta `Descargas\...`: la carpeta se llama `Downloads` aunque el Explorador muestre «Descargas» | Ruta completa; mejor mover la llave a `%USERPROFILE%\.ssh` y dejarla solo para el usuario (paso 1) |
 | `server_name` con `tudominio.com` | Texto de ejemplo de una guía que nadie cambió; la página funcionaba igual porque nginx tiene un solo sitio | Cambiarlo a `wispr.training` antes de `certbot` (paso 6) |
 | `http://3.140.124.203` da 404 | Normal desde HTTPS: el certificado es del dominio, y el bloque del puerto 80 de `certbot` solo redirige el dominio | Entrar por `https://wispr.training` |
+| tshark: «You don't have permission to read the file "/home/kali/.config/wireshark/hosts"» | El tmpfs de `/home/kali` quedaba de root (`drwx------`) | `WISPR-frontend` `69bf8ea` lo monta con `uid=1000`. Hay que borrar los contenedores `wispr-kali-*` para que Node los cree de nuevo |
+| nmap: «Operation not permitted» o «Couldn't open a raw socket» | Capabilities de archivo con `--cap-drop ALL`, y el envoltorio de Kali agrega `--privileged` | `69bf8ea`: imagen sin capabilities y `nmap` directo al binario. Reconstruir la imagen (paso 7) |
+| hashcat termina en `Killed` | Compilar su kernel en la CPU pasa de los 768 MB del laboratorio | Usar `aircrack-ng -w`, que rompe handshake y PMKID. La terminal lo explica |
+| La SSH se queda colgada en un comando largo sin salida | La red (p. ej. la de EXPOTEC) corta las conexiones calladas | `ssh -o ServerAliveInterval=15`, o correr el comando con `nohup` y leer su log |
 
 ## Dominio `wispr.training`
 

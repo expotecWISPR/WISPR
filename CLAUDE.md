@@ -889,6 +889,25 @@ comandos y pendientes: `docs/ESTADO-PROYECTO.md`. **EXPOTEC es el 12 de noviembr
   tiene IPv6 y la red de esa PC no tiene IPv6 de internet. Arreglo: `DATABASE_URL` por el
   **Session Pooler** (`aws-0-ca-central-1.pooler.supabase.com:5432`, usuario `postgres.<ref>`).
   Para distinguirlo: `nslookup db.<ref>.supabase.co` responde solo una IP `2600:…` → es esto.
+* **Herramientas de Kali revisadas en EXPOTEC (13 nov) — `WISPR-frontend` `69bf8ea`, ya en la EC2.**
+  Probadas una por una con los archivos reales de los retos, en contenedores con las mismas
+  opciones de `docker run` que usa Node. Arreglado:
+  - **tshark** («You don't have permission to read ~/.config/wireshark/…»): el tmpfs de
+    `/home/kali` quedaba de root con `drwx------`. Ahora se monta con `uid=1000,gid=1000`
+    (`server.js`). Lo mismo rompía **john** y guardar en el home.
+  - **nmap** no arrancaba: el binario tiene capabilities de archivo y con `--cap-drop ALL` el
+    kernel no lo ejecuta; además el `/usr/bin/nmap` de Kali agrega `--privileged`. Se quitan las
+    capabilities y se apunta al binario (Dockerfile): escanea con `-sT`; `-sS` sigue pidiendo root.
+  - **hashcat** no veía la CPU (faltaba `ocl-icd-libopencl1`). Ya la ve, pero compilar su kernel
+    pasa de los 768 MB del laboratorio y el kernel de Linux lo mata (probado con
+    `POCL_MEMORY_LIMIT`, `-O`, `-w 1` y `POCL_WORK_GROUP_METHOD=cbs`: ninguno alcanza). Si pasa,
+    la terminal lo explica y propone **aircrack-ng**, que rompe handshake y PMKID.
+  - Agregados `python3-scapy` (lo pide el reto WEP), `ping` y un aviso para `wireshark`.
+  - Funcionan: tshark, tcpdump `-r`, capinfos/editcap/mergecap, aircrack-ng, airdecap-ng,
+    hcxpcapngtool, john, crunch, nmap/ping/curl/nc al objetivo, exiftool, binwalk, strings, xxd,
+    base64/base32, tr, openssl, jq, python3 con PIL y scapy, `ctf`. **No funcionan por diseño**
+    (sin tarjeta Wi-Fi ni root): airodump-ng, aireplay-ng, mdk4, reaver, bully, arpspoof, captura
+    en vivo y `nmap -sS`.
 
 ## ▶ RETOMAR AQUÍ (cierre de la sesión del 7 nov)
 
