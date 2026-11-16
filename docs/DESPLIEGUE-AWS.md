@@ -17,7 +17,9 @@ camino. Sirve para repetirlo en otra instancia o para entender la actual.
 | DNS de `wispr.training` | Hecho (7 nov): solo responde `3.140.124.203` |
 | HTTPS | Hecho (7 nov): Let's Encrypt con `certbot`, `http` redirige a `https`. HSTS apagado (ver [HTTPS](#https)) |
 | Laboratorios que se liberan solos e ícono de la pestaña | En la EC2 (7 nov) |
-| Arreglo de los puntos (`63a0e38`) | En GitHub; falta `git pull` en la EC2 |
+| Arreglo de los puntos (`63a0e38`) | En la EC2 (va dentro de `9c8062b`, 13 nov) |
+| CloudWatch (actividad e ingresos) | Archivos listos en `deploy/cloudwatch/`; falta instalarlo (ver [CloudWatch](#cloudwatch-actividad-e-ingresos)) |
+| Presupuesto de AWS | US$20/mes con acción que detiene la EC2; la apagó el 15 nov (ver [Presupuesto](#presupuesto-de-aws-por-qué-la-ec2-se-puede-apagar-sola)) |
 | Electron apuntando al servidor | Funciona con `WISPR_URL=https://wispr.training` (probado el 7 nov) |
 
 ## Cómo quedó
@@ -390,11 +392,86 @@ sudo systemctl restart wispr-web
 Cuesta aproximadamente US$1 más por día. Al terminar, se hace lo mismo con `t3.medium` y
 `MAX_LAB_ENVIRONMENTS=3`.
 
+## Presupuesto de AWS (por qué la EC2 se puede apagar sola)
+
+La cuenta tiene un presupuesto en **AWS Budgets** de **US$20 al mes** con una **acción que detiene la
+EC2** al llegar al límite. El 15 nov a las 6:07 p. m. (hora de Costa Rica) se activó y apagó la
+instancia: en la consola aparece como `User initiated (2026-11-16 00:07:09 GMT)`, porque la acción
+usa un rol de AWS, no porque alguien entrara. No hubo intrusión ni falla.
+
+**Si la EC2 aparece detenida y nadie la apagó, revisar primero Billing → Budgets.**
+
+Encendida todo el día, la EC2 cuesta unos **US$36 al mes**: US$30 de la t3.medium ($0,0416/h), US$3,60
+de la IP pública y US$2,40 del disco de 30 GB. La IP y el disco se cobran también con la EC2
+apagada. Un límite de US$20 alcanza para encenderla por ratos, no para tenerla encendida siempre.
+Para tenerla siempre encendida: subir el límite a unos US$40, dejar la acción de detener y agregar
+avisos por correo al 50 % y al 80 %. AWS actualiza los costos unas pocas veces al día, así que el
+gasto puede pasarse un poco del límite antes de que la acción se ejecute.
+
+## CloudWatch: actividad e ingresos
+
+El agente de CloudWatch manda a AWS el registro de accesos de nginx y la memoria y el disco de la
+EC2. Con eso, el panel **WISPR** de CloudWatch muestra:
+
+| Gráfica | De dónde sale |
+|---|---|
+| Ingresos | `POST /api/players/login-verify` o `login-voucher` con respuesta 200 (login completo) |
+| Registros | `POST /api/players/verify` con 200 (cuenta nueva verificada) |
+| Visitas | `GET /` con 200 (cada vez que se carga la página, en la web o en la app de escritorio) |
+| Visitantes distintos por día | IPs distintas que cargaron la página (consulta de Logs Insights) |
+| Logins fallidos | `POST /api/players/login` con 401 (contraseña incorrecta) |
+| Errores del servidor | cualquier respuesta 5xx |
+| CPU, memoria y disco | métricas de la EC2 |
+
+Los ingresos se cuentan desde nginx y no desde Supabase porque la tabla `sessions` borra la fila al
+cerrar sesión: no guarda historial.
+
+**Límites:** «Visitas» cuenta cargas de la página, no personas, y también cuenta bots. Un colegio
+entero sale por una sola IP, así que «visitantes distintos» cuenta redes, no estudiantes. Las horas
+salen en UTC; en el panel se cambia a la hora local en el selector de tiempo → **Zona horaria local**.
+
+**Costo:** debería ser US$0. Son 7 métricas propias (la capa gratuita da 10), 1 panel (da 3) y pocos
+MB de registros al mes (da 5 GB). Las consultas de Logs Insights cobran US$0,005 por GB leído. Los
+registros se borran a los 30 días; tienen IPs de los estudiantes, que son datos personales.
+
+**Archivos:** `deploy/cloudwatch/amazon-cloudwatch-agent.json` (configuración del agente) y
+`deploy/cloudwatch/crear_metricas.sh` (métricas y panel).
+
+### Instalar
+
+1. **Rol de IAM para la EC2.** El agente necesita permiso para escribir en CloudWatch. IAM → Roles →
+   **Crear rol** → Servicio de AWS → **EC2** → política **`CloudWatchAgentServerPolicy`** → nombre
+   `WISPR-EC2-CloudWatch`. Luego EC2 → la instancia → **Acciones → Seguridad → Modificar rol de IAM**
+   → elegir ese rol. Si la instancia ya tenía un rol, agregarle esa política en vez de cambiarlo.
+2. **Agente en la EC2**, por SSH:
+
+   ```bash
+   # El token de sesión de la terminal no debe estar en el registro que se va a mandar.
+   # Debe dar 0; si no, revisar que /ws/terminal tenga "access_log off" en nginx.
+   sudo grep -c "token=" /var/log/nginx/access.log
+
+   cd ~/WISPR && git pull
+   wget -q https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+   sudo dpkg -i -E ./amazon-cloudwatch-agent.deb && rm amazon-cloudwatch-agent.deb
+   sudo usermod -aG adm cwagent      # el grupo adm puede leer /var/log/nginx
+   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s \
+     -c file:/home/ubuntu/WISPR/deploy/cloudwatch/amazon-cloudwatch-agent.json
+   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status   # "running"
+   ```
+
+   El agente arranca solo al encender la EC2. Si algo falla, su registro está en
+   `/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log`.
+3. **Métricas y panel**, en **CloudShell** (ícono `>_` arriba en la consola, región Ohio): **Acciones
+   → Cargar archivo** → `deploy/cloudwatch/crear_metricas.sh`, y luego `bash crear_metricas.sh`.
+   Antes de crear cada métrica la prueba con una línea de ejemplo; si una falla, se detiene sin crear
+   nada más. Se puede correr otra vez sin duplicar nada.
+4. Abrir CloudWatch → **Paneles → WISPR**. Los datos empiezan a aparecer a los pocos minutos.
+
 ## Pendiente
 
-1. **Traer el arreglo de los puntos** (`63a0e38`): `cd ~/WISPR-frontend && git pull && sudo
-   systemctl restart wispr-web` (no hace falta `npm ci`). Luego probar una sesión completa por
-   `https://wispr.training`: abrir un reto, pulsar «Abrir en Kali», usar `ctf show` y `ctf submit`.
+1. ~~Traer el arreglo de los puntos (`63a0e38`)~~ Ya está en la EC2: va dentro de `9c8062b`, que se
+   desplegó el 13 nov. Falta probar una sesión completa por `https://wispr.training`: abrir un reto,
+   pulsar «Abrir en Kali», usar `ctf show` y `ctf submit`.
 2. **Confirmar la renovación del certificado** si no se hizo: `sudo certbot renew --dry-run`.
 3. ~~**Electron:** fijar la dirección del servidor~~ Hecho (7 nov): el instalador abre siempre
    `https://wispr.training` y se descarga desde `wispr.training/#descargar` (GitHub Releases).
